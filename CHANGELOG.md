@@ -18,6 +18,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 变更 / Changed
+
+- 聊天请求遇到临时服务或网络错误时会自动重试最多 3 次，并在重试期间同步显示当前尝试次数；最终失败仍可手动重试。
+
+- Chat requests now automatically retry up to 3 times for transient service or network errors, with the current attempt shown during the retry; a manual retry remains available after the final failure.
+
 ## 1.8.0 - 2026-09-29
 
 ### 新增 / Added

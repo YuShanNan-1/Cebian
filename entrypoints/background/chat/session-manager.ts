@@ -64,6 +64,7 @@ import {
   type ToolGate,
 } from '@/lib/agent/tool-permissions';
 import type { BroadcastMessage, ContextUsage, TurnSettings } from '@/lib/ipc/protocol';
+import type { ProviderRetryStatus } from '@/lib/agent/provider-retry';
 import { replaceUserText, truncateForRetry, sanitizeAgentMessages } from '@/lib/agent/message-helpers';
 import { collectTitleSource, defaultSessionTitle } from '@/lib/agent/session-title';
 import { generateSessionTitle } from './title-generator';
@@ -192,6 +193,8 @@ interface AgentSession {
    * run 中途、phase 必须保持 `running`，所以单独用这个标志点亮界面的「正在压缩」。
    */
   compactingInTurn: boolean;
+  /** Current provider retry status, if a chat request is waiting to retry. */
+  retryStatus?: ProviderRetryStatus;
   /**
    * 会话树句柄（transcript 的持久化真相）。行不存在的会话（`sessionCreated=false`）
    * 没有树，所有树操作按 `sessionCreated` 守卫跳过。
@@ -257,6 +260,20 @@ class SessionManager {
     return pending ? [pending.request] : [];
   }
 
+  private setRetryStatus(sessionId: string, status: ProviderRetryStatus): void {
+    const agentSession = this.sessions.get(sessionId);
+    if (!agentSession) return;
+    agentSession.retryStatus = status;
+    broadcastToViewers(sessionId, { type: 'agent_retry', sessionId, status });
+  }
+
+  private clearRetryStatus(sessionId: string): void {
+    const agentSession = this.sessions.get(sessionId);
+    if (!agentSession?.retryStatus) return;
+    agentSession.retryStatus = undefined;
+    broadcastToViewers(sessionId, { type: 'agent_retry', sessionId, status: null });
+  }
+
   /**
    * Broadcast a full `session_state` snapshot for the session. Used by the
    * permission flow to push the inserted / updated `permissionRequest` card
@@ -272,6 +289,7 @@ class SessionManager {
       isCompacting: agentSession.phase === 'compacting' || agentSession.compactingInTurn,
       pendingTools: this.getPendingToolSnapshot(agentSession),
       pendingPermissions: this.getPendingPermissions(agentSession),
+      ...(agentSession.retryStatus ? { retryStatus: agentSession.retryStatus } : {}),
     });
   }
 
@@ -802,6 +820,10 @@ class SessionManager {
       messages,
       tools: sessionTools,
       beforeToolCall,
+      providerRetry: {
+        onRetry: (status) => this.setRetryStatus(sessionId, status),
+        onSettled: () => this.clearRetryStatus(sessionId),
+      },
       // 轮内上下文管理。两者都按 sessionId 反查 AgentSession（同 beforeToolCall 的
       // 做法）——agent 先于 AgentSession 构造，这里还拿不到它的引用。
       prepareNextTurnWithContext: (turn, signal) =>
@@ -914,6 +936,7 @@ class SessionManager {
       }
 
       case 'agent_end': {
+        agentSession.retryStatus = undefined;
         dropStreamBroadcast(sessionId);
         agentSession.phase = 'idle';
         this.updateKeepAlive();
@@ -2200,6 +2223,7 @@ class SessionManager {
     isCompacting: boolean;
     pendingTools: { toolName: string; toolCallId: string; args: any }[];
     pendingPermissions: PermissionRequest[];
+    retryStatus?: ProviderRetryStatus;
   } | null {
     const agentSession = this.sessions.get(sessionId);
     if (!agentSession) return null;
@@ -2218,6 +2242,7 @@ class SessionManager {
       isCompacting: agentSession.phase === 'compacting' || agentSession.compactingInTurn,
       pendingTools: this.getPendingToolSnapshot(agentSession),
       pendingPermissions: this.getPendingPermissions(agentSession),
+      ...(agentSession.retryStatus ? { retryStatus: agentSession.retryStatus } : {}),
     };
   }
 

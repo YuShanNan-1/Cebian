@@ -24,6 +24,11 @@ import {
   type CompactionSummaryMessage,
 } from '@/lib/agent/compaction-summary';
 import { sanitizeAgentMessages } from '@/lib/agent/message-helpers';
+import {
+  CHAT_PROVIDER_MAX_RETRIES,
+  observeProviderRetries,
+  type ProviderRetryStatus,
+} from '@/lib/agent/provider-retry';
 
 // ─── Agent factory ───
 
@@ -59,6 +64,11 @@ interface CreateAgentOptions {
    * 把控制权交回用户，而不是继续跑到 provider 返回 400。
    */
   shouldStopAfterTurn?: AgentOptions['shouldStopAfterTurn'];
+  /** Provider retries are enabled only for the user-facing chat agent. */
+  providerRetry?: {
+    onRetry: (status: ProviderRetryStatus) => void;
+    onSettled: () => void;
+  };
 }
 
 function createCebianAgent(options: CreateAgentOptions): Agent {
@@ -71,7 +81,25 @@ function createCebianAgent(options: CreateAgentOptions): Agent {
     beforeToolCall,
     prepareNextTurnWithContext,
     shouldStopAfterTurn,
+    providerRetry,
   } = options;
+
+  const streamFn = providerRetry
+    ? (requestModel: Model<Api>, requestContext: Parameters<typeof streamSimple>[1], streamOptions?: Parameters<typeof streamSimple>[2]) => {
+      const baseFetch = streamOptions?.fetch ?? globalThis.fetch.bind(globalThis);
+      const observedFetch = observeProviderRetries(
+        baseFetch,
+        CHAT_PROVIDER_MAX_RETRIES,
+        providerRetry.onRetry,
+        providerRetry.onSettled,
+      );
+      return streamSimple(requestModel, requestContext, {
+        ...streamOptions,
+        maxRetries: CHAT_PROVIDER_MAX_RETRIES,
+        fetch: observedFetch,
+      });
+    }
+    : streamSimple;
 
   const agentOptions: AgentOptions = {
     initialState: {
@@ -128,7 +156,7 @@ function createCebianAgent(options: CreateAgentOptions): Agent {
     // 发送 LLM 请求的 stream 函数。pi 0.81 起 streamFn 必填（内置默认回退被移除），
     // 复用 compat 的 streamSimple：按 model.api 解析内置 provider，行为等价旧默认，
     // apiKey 仍由下面的 getApiKey 动态解析
-    streamFn: streamSimple,
+    streamFn,
 
     // Dynamic API key resolution (handles OAuth token refresh)
     getApiKey: (provider: string): Promise<string | undefined> =>

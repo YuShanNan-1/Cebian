@@ -783,6 +783,8 @@ chat:
     # Shown after the auto-reconnect has tried several times without
     # success. Hints that recovery is in progress, doesn't promise a fix.
     reconnecting: "Connection lost, retrying…"
+    # $1 = current retry number, $2 = maximum automatic retries
+    retrying: "Temporary error: retrying ($1/$2)…"
     welcomeReady: "What can I help you with?"
     # Example prompt cards shown in the new-chat empty state. The *Title is
     # the short card label; the *Prompt is the full text dropped into the

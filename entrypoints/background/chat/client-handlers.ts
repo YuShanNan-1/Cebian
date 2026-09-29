@@ -115,6 +115,7 @@ const chatClientHandlers: ClientHandlerMap = {
           isCompacting: fresh.isCompacting,
           pendingTools: fresh.pendingTools,
           pendingPermissions: fresh.pendingPermissions,
+          ...(fresh.retryStatus ? { retryStatus: fresh.retryStatus } : {}),
           ...(branchInfo !== undefined ? { branchInfo } : {}),
         });
         // 订阅快照本身是同步拼的，占用要先读一次 storage——单独补一帧，新开的窗口

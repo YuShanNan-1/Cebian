@@ -18,6 +18,7 @@ import { buildSlashPromptBlock, type SlashPrompt } from '@/lib/ai-config/slash-p
 import { wrapUserRequest } from '@/lib/agent/prompt-envelope';
 import { applyStreamOps } from '@/lib/agent/stream-replica';
 import type { PermissionRequest } from '@/lib/agent/tool-permissions';
+import type { ProviderRetryStatus } from '@/lib/agent/provider-retry';
 import { replaceUserText, truncateForRetry } from '@/lib/agent/message-helpers';
 import type { Message } from '@earendil-works/pi-ai';
 import { t } from '@/lib/i18n';
@@ -38,6 +39,8 @@ export interface AgentPortState {
   /** 后台正在执行发送前的上下文压缩时为 true。用于驱动一个与普通思考态不同的
    *  「压缩中」指示。 */
   isCompacting: boolean;
+  /** 当前聊天模型请求正在等待自动重试时的状态。 */
+  retryStatus: ProviderRetryStatus | null;
   sessionId: string | null;
   sessionTitle: string;
   connected: boolean;
@@ -85,6 +88,7 @@ export function useBackgroundAgent(callbacks: AgentPortCallbacks) {
     branchInfo: {},
     isAgentRunning: false,
     isCompacting: false,
+    retryStatus: null,
     sessionId: null,
     sessionTitle: '',
     connected: false,
@@ -191,6 +195,7 @@ export function useBackgroundAgent(callbacks: AgentPortCallbacks) {
             branchInfo: msg.branchInfo ?? prev.branchInfo,
             isAgentRunning: msg.isRunning,
             isCompacting: msg.isCompacting ?? false,
+            retryStatus: msg.retryStatus ?? prev.retryStatus,
           }));
           // 模型字段同样仅首次订阅携带（mid-stream rebuild 省略），用以回填 turn 草稿。
           if (msg.provider !== undefined) {
@@ -200,7 +205,12 @@ export function useBackgroundAgent(callbacks: AgentPortCallbacks) {
 
         case 'agent_start':
           if (!isCurrentSession(msg.sessionId)) break;
-          setState(prev => ({ ...prev, isAgentRunning: true, isCompacting: false }));
+          setState(prev => ({ ...prev, isAgentRunning: true, isCompacting: false, retryStatus: null }));
+          break;
+
+        case 'agent_retry':
+          if (!isCurrentSession(msg.sessionId)) break;
+          setState(prev => ({ ...prev, retryStatus: msg.status }));
           break;
 
         case 'context_usage':
@@ -238,6 +248,7 @@ export function useBackgroundAgent(callbacks: AgentPortCallbacks) {
             branchInfo: msg.branchInfo ?? prev.branchInfo,
             isAgentRunning: false,
             isCompacting: false,
+            retryStatus: null,
           }));
           setPendingTools(new Map());
           setPendingPermissions(new Map());
@@ -341,7 +352,7 @@ export function useBackgroundAgent(callbacks: AgentPortCallbacks) {
         case 'error':
           if (msg.sessionId && !isCurrentSession(msg.sessionId)) break;
           console.error('[AgentPort] Error:', msg.error);
-          setState(prev => ({ ...prev, isAgentRunning: false, isCompacting: false, lastError: msg.error }));
+          setState(prev => ({ ...prev, isAgentRunning: false, isCompacting: false, retryStatus: null, lastError: msg.error }));
           break;
 
         case 'recorder_status':
@@ -715,6 +726,7 @@ export function useBackgroundAgent(callbacks: AgentPortCallbacks) {
           branchInfo: {},
           isAgentRunning: false,
           isCompacting: false,
+          retryStatus: null,
           sessionTitle: '',
           lastError: null,
           // 不清的话切过去的一瞬间会显示上一个会话的占用，等后台补帧才纠正。
@@ -731,6 +743,7 @@ export function useBackgroundAgent(callbacks: AgentPortCallbacks) {
       branchInfo: {},
       isAgentRunning: false,
       isCompacting: false,
+      retryStatus: null,
       sessionId: null,
       sessionTitle: '',
       connected: true,

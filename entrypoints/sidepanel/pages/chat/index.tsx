@@ -154,7 +154,7 @@ export function ChatPage({ onOpenSettings, onTitleChange }: { onOpenSettings?: (
     }, [navigate]),
   });
 
-  const { messages, branchInfo, isAgentRunning, isCompacting, sessionId: activeSessionId, sessionTitle, lastError, contextUsage } = state;
+  const { messages, branchInfo, isAgentRunning, isCompacting, retryStatus, sessionId: activeSessionId, sessionTitle, lastError, contextUsage } = state;
 
   // Mirror activeSessionId into a ref so the subscribe-effect can read the
   // latest value WITHOUT re-running when activeSessionId changes. Putting
@@ -261,7 +261,7 @@ export function ChatPage({ onOpenSettings, onTitleChange }: { onOpenSettings?: (
 
   const lastMsg = messages.length > 0 ? messages[messages.length - 1] : null;
   // 压缩期间隐藏思考占位符，改由专门的压缩状态条提示，避免两个动效重叠。
-  const showWaitingPlaceholder = effectiveRunning && !isCompacting && lastMsg && lastMsg.role === 'user';
+  const showWaitingPlaceholder = effectiveRunning && !isCompacting && !retryStatus && lastMsg && lastMsg.role === 'user';
 
   // History of user-typed prompts in this session, oldest first; consumed by
   // ChatInput's ↑/↓ navigation. Strips the <user-request> wrapper added by
@@ -613,6 +613,14 @@ export function ChatPage({ onOpenSettings, onTitleChange }: { onOpenSettings?: (
           {/* Waiting placeholder */}
           {showWaitingPlaceholder && (
             <AgentMessage isStreaming />
+          )}
+
+          {retryStatus && isAgentRunning && (
+            <AgentMessage>
+              <span className="text-xs italic text-muted-foreground/80">
+                {t('chat.session.retrying', [retryStatus.attempt, retryStatus.maxAttempts])}
+              </span>
+            </AgentMessage>
           )}
 
           {/* Compaction in-progress placeholder: normal Cebian Agent shell + grey italic status */}

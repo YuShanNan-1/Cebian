@@ -26,6 +26,7 @@ import type { MCPResourceContents } from '@/lib/mcp/client';
 import type { PermissionRequest } from '@/lib/agent/tool-permissions';
 import type { ContextUsage } from '@/lib/agent/compaction';
 import type { BranchEntryInfo } from '@/lib/agent/session-projection';
+import type { ProviderRetryStatus } from '@/lib/agent/provider-retry';
 
 // ─── Port name ───
 
@@ -244,6 +245,8 @@ export type ServerMessage =
        *  其余广播一律缺省 / false；hook 在 `agent_start` / `agent_end` /
        *  `error` 时清掉它。 */
       isCompacting?: boolean;
+      /** Provider-level retry currently waiting for the next request attempt. */
+      retryStatus?: ProviderRetryStatus;
       pendingTools?: { toolName: string; toolCallId: string; args: any }[];
       /** Snapshot of in-flight permission prompts (a tool is paused in its
        *  `beforeToolCall` gate awaiting the user). Drives reconnect/restore
@@ -255,6 +258,7 @@ export type ServerMessage =
       branchInfo?: Record<string, BranchEntryInfo>;
     }
   | { type: 'agent_start'; sessionId: string }
+  | { type: 'agent_retry'; sessionId: string; status: ProviderRetryStatus | null }
   /** 两个全量边界（session_state / message_end / agent_end）之间的流式增量帧
    *  （一次合并窗内的操作序列，按序应用）。应用失败说明副本漂移，订阅方应
    *  重发 subscribe 拉取权威快照；对着过期副本应用产生的短暂错乱也会被下一
