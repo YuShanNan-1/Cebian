@@ -702,6 +702,7 @@ chat:
       pageExecuteJs: "Run scripts in your web pages — read and change page content, and act through your logged-in sessions"
       vfsRead: "Read files in this skill's own workspace folder"
       vfsWrite: "Read and write files in this skill's own workspace folder"
+      skillAssetsRead: "Read bundled resource files in this skill's own folder"
       bgFetchAny: "Make network requests to any website in the background, bypassing cross-origin limits"
       # $1 = match pattern (host scope)
       bgFetchPattern: "Make background network requests to $1, bypassing cross-origin limits"

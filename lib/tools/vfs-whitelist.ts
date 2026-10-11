@@ -15,7 +15,7 @@
  */
 
 import { normalizePath } from '@/lib/persistence/vfs';
-import { workspaceRootForSession } from '@/lib/persistence/vfs-paths';
+import { CEBIAN_SKILLS_DIR, workspaceRootForSession } from '@/lib/persistence/vfs-paths';
 import { isValidSessionId } from '@/lib/utils';
 import { parsePermission } from './permissions';
 
@@ -79,6 +79,19 @@ export function sessionSkillRoot(sessionId: string, skill: string): string {
   return normalizePath(`${workspaceRootForSession(sessionId)}/${skill}`);
 }
 
+/** Compute the installed skill's read-only asset root. */
+export function skillAssetsRoot(skill: string): string {
+  if (!isValidSkillName(skill)) {
+    throw new Error(`Invalid skill name for asset scope: ${skill}`);
+  }
+  const skillsRoot = normalizePath(CEBIAN_SKILLS_DIR);
+  const root = normalizePath(`${skillsRoot}/${skill}`);
+  if (!root.startsWith(`${skillsRoot}/`)) {
+    throw new Error('Invalid skill name for asset scope: path traversal detected.');
+  }
+  return root;
+}
+
 /**
  * Check whether a vfs method call is allowed for the given permission set.
  * Blocks prototype pollution attempts (`__proto__`, `constructor`, ...) and
@@ -130,6 +143,19 @@ export function resolveScopedPath(rel: unknown, root: string): string {
   // candidate === root 是合法情况（如 readdir('.')）；只拦实际越界。
   if (candidate !== root && !candidate.startsWith(root + '/')) {
     throw new Error(`vfs path escapes skill workspace: ${rel}`);
+  }
+  return candidate;
+}
+
+/** Resolve a read-only asset path, rejecting roots outside the installed skills tree. */
+export function resolveSkillAssetPath(rel: unknown, root: string): string {
+  const skillsRoot = normalizePath(CEBIAN_SKILLS_DIR);
+  if (root !== normalizePath(root) || !root.startsWith(`${skillsRoot}/`)) {
+    throw new Error('Skill asset scope is outside the installed skills directory.');
+  }
+  const candidate = resolveScopedPath(rel, root);
+  if (candidate === root) {
+    throw new Error('Skill asset path must name a file.');
   }
   return candidate;
 }

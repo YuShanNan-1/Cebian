@@ -5,6 +5,7 @@ import {
   classifyPermission,
   grantsChromeNamespace,
   grantsPageExec,
+  grantsSkillAssetsRead,
   type Permission,
 } from '@/lib/tools/permissions';
 
@@ -13,6 +14,7 @@ describe('parsePermission — 原始 token → 判别联合', () => {
     expect(parsePermission('page.executeJs')).toEqual({ kind: 'pageExecuteJs' });
     expect(parsePermission('vfs.read')).toEqual({ kind: 'vfsRead' });
     expect(parsePermission('vfs.write')).toEqual({ kind: 'vfsWrite' });
+    expect(parsePermission('skill.assets.read')).toEqual({ kind: 'skillAssetsRead' });
   });
 
   it('bare bgFetch / 带 pattern 的 bgFetch', () => {
@@ -47,6 +49,7 @@ describe('isPermissionAllowed — 运行时是否允许', () => {
     expect(isPermissionAllowed('page.executeJs')).toBe(true);
     expect(isPermissionAllowed('vfs.read')).toBe(true);
     expect(isPermissionAllowed('vfs.write')).toBe(true);
+    expect(isPermissionAllowed('skill.assets.read')).toBe(true);
     expect(isPermissionAllowed('bgFetch')).toBe(true);
     expect(isPermissionAllowed('bgFetch:https://api.example.com/*')).toBe(true);
   });
@@ -75,6 +78,7 @@ describe('classifyPermission — 敏感分类', () => {
   it('vfs.* / bgFetch 为 normal', () => {
     expect(classifyPermission('vfs.read')).toBe('normal');
     expect(classifyPermission('vfs.write')).toBe('normal');
+    expect(classifyPermission('skill.assets.read')).toBe('normal');
     expect(classifyPermission('bgFetch')).toBe('normal');
     expect(classifyPermission('bgFetch:https://api.example.com/*')).toBe('normal');
   });
@@ -91,6 +95,7 @@ describe('穷尽守卫 — 每个 kind 都被分类覆盖', () => {
     pageExecuteJs: 'page.executeJs',
     vfsRead: 'vfs.read',
     vfsWrite: 'vfs.write',
+    skillAssetsRead: 'skill.assets.read',
     bgFetch: 'bgFetch',
     chrome: 'chrome.cookies',
   };
@@ -119,5 +124,11 @@ describe('grantsChromeNamespace / grantsPageExec — per-run 能力反查', () =
     expect(grantsPageExec(['page.executeJs'])).toBe(true);
     expect(grantsPageExec(['vfs.read', 'chrome.tabs'])).toBe(false);
     expect(grantsPageExec([])).toBe(false);
+  });
+
+  it('grantsSkillAssetsRead 只认本地技能资源读取权限', () => {
+    expect(grantsSkillAssetsRead(['skill.assets.read'])).toBe(true);
+    expect(grantsSkillAssetsRead(['vfs.read', 'page.executeJs'])).toBe(false);
+    expect(grantsSkillAssetsRead([])).toBe(false);
   });
 });

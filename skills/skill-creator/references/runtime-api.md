@@ -75,6 +75,7 @@ metadata:
     - chrome.bookmarks
     - chrome.tabs
     - page.executeJs
+    - skill.assets.read
     - bgFetch:https://api.example.com/*
     - vfs.write
 ```
@@ -83,6 +84,7 @@ Each entry is one of:
 
 - **`chrome.<namespace>`** — exposes `chrome.<namespace>.<method>(...)` for whitelisted methods only (see table below). Calls return `Promise`s.
 - **`page.executeJs`** — exposes the global `executeInPage(code)` async function for injecting JS into a tab.
+- **`skill.assets.read`** — exposes `skillAssets.readFile(path, encoding?)` for reading files bundled inside this skill's own directory. It is read-only, accepts relative paths only, and cannot access other skills or session workspaces.
 - **`bgFetch`** or **`bgFetch:<match-pattern>`** — exposes the `bgFetch(url, init?)` global, a fetch-like helper that runs in the background service worker (bypasses CORS). Bare `bgFetch` allows any http(s) URL (`*://*/*`); add a match-pattern to scope to specific hosts. Multiple `bgFetch:` lines OR together. See the bgFetch section below.
 - **`vfs.read`** / **`vfs.write`** — exposes the `vfs` global with file methods scoped to `/workspaces/<sessionId>/<skill>/`. `vfs.write` automatically implies the read methods (no separate `vfs.read` needed when you also write). See the vfs section below.
 
@@ -93,6 +95,17 @@ Failure modes for misdeclared permissions:
 - Always-available globals (`fetch`, `JSON`, `crypto`, `args`, etc.) are unaffected by whether `metadata.permissions` is declared. The CORS-limited sandbox `fetch` is always there.
 
 **Minimum-privilege principle**: declare only what the script actually calls. Each unused permission widens the trust prompt the user sees, training them to dismiss permission prompts mindlessly.
+
+## `skillAssets.readFile(path, encoding?)`
+
+When `skill.assets.read` is declared, the read-only `skillAssets` global can load bundled lookup tables, parsers, or other static files from the current skill directory:
+
+```js
+const table = JSON.parse(await skillAssets.readFile('assets/font/table.json', 'utf8'));
+const parserBytes = await skillAssets.readFile('assets/vendor/parser.js');
+```
+
+Paths must be relative and remain inside the current skill directory. This API cannot list, write, or delete files, and it makes no network requests. It is separate from `vfs`, whose paths refer only to the current session's workspace.
 
 ## `chrome.*` whitelist
 

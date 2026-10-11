@@ -8,12 +8,18 @@ import { ensureOffscreen } from './offscreen';
 import { executeViaDebugger, isDebuggerAvailable } from '@/lib/browser/debugger-session';
 import { isChromeCallAllowed } from './chrome-api-whitelist';
 import { vfs } from '@/lib/persistence/vfs';
-import { isVfsCallAllowed, resolveScopedPath, sessionSkillRoot } from './vfs-whitelist';
+import {
+  isVfsCallAllowed,
+  resolveScopedPath,
+  resolveSkillAssetPath,
+  sessionSkillRoot,
+  skillAssetsRoot,
+} from './vfs-whitelist';
 import { decodeBinaryArgs, decodeBinary, encodeBinary } from '@/lib/ipc/sandbox-binary';
 import type { MatchPattern } from './url-pattern';
 import { parseBgFetchPatterns } from './url-pattern';
 import { handleBgFetch } from './bg-fetch';
-import { parsePermission, grantsChromeNamespace, grantsPageExec } from './permissions';
+import { parsePermission, grantsChromeNamespace, grantsPageExec, grantsSkillAssetsRead } from './permissions';
 
 // ─── Pending run requests ───
 
@@ -26,6 +32,7 @@ interface PendingRun {
   reject: (error: Error) => void;
   timeoutId: ReturnType<typeof setTimeout>;
   vfsRoot: string | null;
+  skillAssetsRoot: string | null;
   permissions: string[];
   bgFetchPatterns: MatchPattern[] | null;
   /** AbortController for in-flight bgFetch calls; aborted when the run
@@ -73,6 +80,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
     case 'sandbox:vfs_call': {
       handleVfsCall(message).catch(err => console.error('[sandbox-rpc] vfs_call error:', err));
+      return false;
+    }
+
+    case 'sandbox:skill_asset_call': {
+      handleSkillAssetCall(message).catch(err => console.error('[sandbox-rpc] skill_asset_call error:', err));
       return false;
     }
 
@@ -283,6 +295,46 @@ async function handleVfsCall(msg: {
   }).catch(() => {});
 }
 
+async function handleSkillAssetCall(msg: {
+  id: string;
+  callId: string;
+  method: string;
+  args: unknown[];
+}): Promise<void> {
+  let result: unknown;
+  let error: string | undefined;
+
+  try {
+    const pending = pendingRuns.get(msg.id);
+    if (!pending) throw new Error('skill asset call has no matching pending run (timed out or replayed)');
+    if (!pending.skillAssetsRoot || !grantsSkillAssetsRead(pending.permissions)) {
+      throw new Error('skillAssets.readFile not allowed (requires skill.assets.read permission)');
+    }
+    if (msg.method !== 'readFile') throw new Error(`Unknown skillAssets method: ${msg.method}`);
+    if (!Array.isArray(msg.args) || msg.args.length === 0) {
+      throw new Error('skillAssets.readFile requires a relative file path');
+    }
+
+    const callArgs = decodeBinaryArgs(msg.args);
+    const assetPath = resolveSkillAssetPath(callArgs[0], pending.skillAssetsRoot);
+    const encoding = callArgs[1];
+    if (encoding !== undefined && encoding !== 'utf8') {
+      throw new Error('skillAssets.readFile encoding must be "utf8" or omitted');
+    }
+    result = await vfs.readFile(assetPath, encoding as 'utf8' | undefined);
+  } catch (err) {
+    error = (err as Error).message;
+  }
+
+  await chrome.runtime.sendMessage({
+    type: 'sandbox:skill_asset_result',
+    id: msg.id,
+    callId: msg.callId,
+    result: encodeBinary(result),
+    error,
+  }).catch(() => {});
+}
+
 // ─── bgFetch handler ───
 // 路由到 lib/tools/bg-fetch.ts；patterns / abort signal 都从 pendingRuns 反查，
 // sandbox envelope 里的字段只是数据载体，不参与权限决策。
@@ -381,6 +433,8 @@ export async function runInSandbox(
   });
   const vfsRoot = wantsVfs ? sessionSkillRoot(sessionId, skill) : null;
 
+  const skillAssetsRootPath = grantsSkillAssetsRead(permissions) ? skillAssetsRoot(skill) : null;
+
   // 同理：解析 bgFetch patterns；malformed pattern 立即抛。
   const bgFetchPatterns = parseBgFetchPatterns(permissions);
 
@@ -396,7 +450,7 @@ export async function runInSandbox(
 
     pendingRuns.set(id, {
       resolve, reject, timeoutId,
-      vfsRoot, permissions, bgFetchPatterns, abortCtrl,
+      vfsRoot, skillAssetsRoot: skillAssetsRootPath, permissions, bgFetchPatterns, abortCtrl,
       tabId,
     });
   });

@@ -18,6 +18,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 新增 / Added
+
+- 新增 `skill.assets.read` 技能权限，允许技能只读访问自身目录内随附的本地资源文件；资源访问限制在当前技能目录内，不新增网络权限。
+
+- Add the `skill.assets.read` skill permission, allowing skills to read bundled local resource files from their own directory; access is restricted to the current skill directory and does not add network permission.
+
 ### 变更 / Changed
 
 - 聊天请求遇到临时服务或网络错误时会自动重试最多 3 次，并在重试期间同步显示当前尝试次数；最终失败仍可手动重试。

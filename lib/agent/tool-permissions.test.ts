@@ -231,6 +231,7 @@ describe('describePermission — 权限 token → 人话路由', () => {
     expect(describePermission('page.executeJs')).toBe('chat.permission.perm.pageExecuteJs');
     expect(describePermission('vfs.read')).toBe('chat.permission.perm.vfsRead');
     expect(describePermission('vfs.write')).toBe('chat.permission.perm.vfsWrite');
+    expect(describePermission('skill.assets.read')).toBe('chat.permission.perm.skillAssetsRead');
     expect(describePermission('bgFetch')).toBe('chat.permission.perm.bgFetchAny');
   });
 

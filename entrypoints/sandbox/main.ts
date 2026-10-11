@@ -78,6 +78,22 @@ interface VfsResponse {
   error?: string;
 }
 
+interface SkillAssetCall {
+  type: 'sandbox:skill_asset_call';
+  id: string;
+  callId: string;
+  method: 'readFile';
+  args: unknown[];
+}
+
+interface SkillAssetResponse {
+  type: 'sandbox:skill_asset_result';
+  id: string;
+  callId: string;
+  result?: unknown;
+  error?: string;
+}
+
 interface BgFetchCall {
   type: 'sandbox:bg_fetch';
   id: string;
@@ -221,6 +237,28 @@ function createVfsProxy(
       };
     },
   });
+}
+
+function createSkillAssetsProxy(
+  permissions: string[],
+  requestId: string,
+): { readFile(path: string, encoding?: 'utf8'): Promise<string | Uint8Array> } | undefined {
+  if (!permissions.some(p => parsePermission(p)?.kind === 'skillAssetsRead')) return undefined;
+  return {
+    readFile(path, encoding) {
+      const callId = crypto.randomUUID();
+      return new Promise((resolve, reject) => {
+        pendingCalls.set(callId, { resolve: value => resolve(value as string | Uint8Array), reject });
+        window.parent.postMessage({
+          type: 'sandbox:skill_asset_call',
+          id: requestId,
+          callId,
+          method: 'readFile',
+          args: encodeBinaryArgs([path, encoding]),
+        } satisfies SkillAssetCall, '*');
+      });
+    },
+  };
 }
 
 // ─── bgFetch (background fetch) proxy ───
@@ -371,6 +409,9 @@ async function executeScript(req: RunRequest): Promise<unknown> {
     globals.vfs = vfsProxy;
   }
 
+  const skillAssets = createSkillAssetsProxy(permissions, req.id);
+  if (skillAssets) globals.skillAssets = skillAssets;
+
   // bgFetch (if any bgFetch / bgFetch:<pattern> permission declared)
   const bgFetch = createBgFetch(permissions, req.id);
   if (bgFetch) {
@@ -471,6 +512,17 @@ window.addEventListener('message', async (event) => {
           // 这里反向解包还原成 Uint8Array。
           pending.resolve(decodeBinary(resp.result));
         }
+      }
+      break;
+    }
+
+    case 'sandbox:skill_asset_result': {
+      const resp = msg as SkillAssetResponse;
+      const pending = pendingCalls.get(resp.callId);
+      if (pending) {
+        pendingCalls.delete(resp.callId);
+        if (resp.error) pending.reject(new Error(resp.error));
+        else pending.resolve(decodeBinary(resp.result));
       }
       break;
     }

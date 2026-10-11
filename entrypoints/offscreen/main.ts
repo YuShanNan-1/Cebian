@@ -144,6 +144,7 @@ chrome.runtime.onMessage.addListener(
           sandboxMsg.type === 'sandbox:chrome_result' ||
           sandboxMsg.type === 'sandbox:page_exec_result' ||
           sandboxMsg.type === 'sandbox:vfs_result' ||
+          sandboxMsg.type === 'sandbox:skill_asset_result' ||
           sandboxMsg.type === 'sandbox:bg_fetch_result') {
         ensureSandboxFrame();
         if (sandboxReady) {

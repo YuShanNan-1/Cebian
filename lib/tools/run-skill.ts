@@ -40,6 +40,7 @@ export const runSkillTool: AgentTool<typeof RunSkillParameters> = {
     'If the skill declares "page.executeJs" permission, an executeInPage(code) async function is available ' +
     'to run JavaScript in a browser tab via CDP and return the result. ' +
     'If the skill declares "vfs.read" or "vfs.write", a `vfs` global is available with readFile/writeFile/mkdir/readdir/stat/exists/unlink methods. ' +
+    'If the skill declares "skill.assets.read", a read-only `skillAssets.readFile(path, encoding?)` global can read files bundled inside that skill directory; paths must be relative and cannot escape that directory. ' +
     'All vfs paths are relative to the skill\'s session workspace (`/workspaces/<sessionId>/<skillName>/`); the absolute root is also exposed as the read-only `vfs.cwd` string for constructing markdown links like `![file](#${vfs.cwd}/out.png)`. ' +
     '`vfs.write` automatically grants read-class methods too (stat / readFile / readdir / exists) — declaring only `vfs.write` is enough for skills that both produce and inspect their own output. ' +
     'NOTE: `vfs.stat` returns `{size, mtimeMs, isFile, isDirectory}` where `isFile`/`isDirectory` are booleans (not methods, unlike Node fs.Stats). Blobs/Files cannot cross the RPC boundary — convert with `new Uint8Array(await blob.arrayBuffer())` before passing to `vfs.writeFile`. ' +

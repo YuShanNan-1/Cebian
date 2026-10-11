@@ -169,6 +169,8 @@ function describePermission(permission: string): string {
       return t('chat.permission.perm.vfsRead');
     case 'vfsWrite':
       return t('chat.permission.perm.vfsWrite');
+    case 'skillAssetsRead':
+      return t('chat.permission.perm.skillAssetsRead');
     case 'bgFetch':
       return perm.pattern
         ? t('chat.permission.perm.bgFetchPattern', [perm.pattern])

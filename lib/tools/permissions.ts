@@ -27,6 +27,7 @@ type Permission =
   | { kind: 'pageExecuteJs' }
   | { kind: 'vfsRead' }
   | { kind: 'vfsWrite' }
+  | { kind: 'skillAssetsRead' }
   | { kind: 'bgFetch'; pattern?: string }
   | { kind: 'chrome'; namespace: string };
 
@@ -45,6 +46,7 @@ function parsePermission(raw: string): Permission | null {
   if (raw === 'page.executeJs') return { kind: 'pageExecuteJs' };
   if (raw === 'vfs.read') return { kind: 'vfsRead' };
   if (raw === 'vfs.write') return { kind: 'vfsWrite' };
+  if (raw === 'skill.assets.read') return { kind: 'skillAssetsRead' };
 
   if (raw === 'bgFetch') return { kind: 'bgFetch' };
   if (raw.startsWith('bgFetch:')) {
@@ -99,6 +101,7 @@ function classifyPermission(raw: string): 'sensitive' | 'normal' {
       return 'sensitive';
     case 'vfsRead':
     case 'vfsWrite':
+    case 'skillAssetsRead':
     case 'bgFetch':
       return 'normal';
     default:
@@ -125,7 +128,12 @@ function grantsPageExec(permissions: string[]): boolean {
   return permissions.some((p) => parsePermission(p)?.kind === 'pageExecuteJs');
 }
 
+/** 该 run 是否可只读访问当前技能目录中的静态资源。 */
+function grantsSkillAssetsRead(permissions: string[]): boolean {
+  return permissions.some((p) => parsePermission(p)?.kind === 'skillAssetsRead');
+}
+
 // ─── Public API ───
 
 export type { Permission };
-export { parsePermission, isPermissionAllowed, classifyPermission, grantsChromeNamespace, grantsPageExec };
+export { parsePermission, isPermissionAllowed, classifyPermission, grantsChromeNamespace, grantsPageExec, grantsSkillAssetsRead };
