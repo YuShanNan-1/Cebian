@@ -10,24 +10,22 @@
 // 前置条件：先完成 rebuilding 简化（retry 原地复用活 agent，退役 rebuilding phase），
 // 让单次运行的生命周期变干净后再拆，避免「边拆边改逻辑」。详见讨论记录。
 
-import {
-  Agent,
-  SessionError,
-  type AgentEvent,
-  type AgentMessage,
-  type Session,
-} from '@earendil-works/pi-agent-core';
+import { Agent, type AgentEvent, type AgentMessage } from '@earendil-works/pi-agent-core';
 import type { AgentContext, AgentLoopTurnUpdate } from '@earendil-works/pi-agent-core';
+import type { Session } from '@/lib/shims/pi-harness/session/session';
+import { SessionError } from '@/lib/shims/pi-harness/session/types';
 import type { Api, AssistantMessage, Message, Model } from '@earendil-works/pi-ai';
 import { clampThinkingLevel } from '@earendil-works/pi-ai';
-import { createCebianAgent } from '../agent/factory';
+import { createCebianAgent, requestPreamble, type AgentPreamble } from '../agent/factory';
 import { composeUserMessage, composeSystemPrompt } from '../agent/prompt-composer';
+import { discardRecordingHars, saveRecordingHars } from './recording-har';
 import type { SlashPrompt } from '@/lib/ai-config/slash-prompt';
 import { resolveProviderApiKey } from '../providers/credentials';
 import type { SessionRecord } from '@/lib/persistence/db';
 import {
   measureContextUsage,
   planCompaction,
+  planManualCompaction,
   runCompaction,
   type CompactionDecision,
   type CompactionPlan,
@@ -156,6 +154,11 @@ interface AgentSession {
    */
   compactionController?: AbortController;
   /**
+   * 在途的手动压缩（`compact()`）所持有的 controller；它掌管会话时与 `compactionController`
+   * 是同一个对象。`agent_start` 据此只中止手动压缩、不误伤轮首自动压缩。
+   */
+  manualCompaction?: AbortController;
+  /**
    * 首轮结束后的自动标题生成在途时持有。`destroySession` 中 abort，让删掉的会话不会
    * 被迟到的生成结果「复活」一条标题写入（rename 对不存在的行返回 false，双保险）。
    */
@@ -175,6 +178,14 @@ interface AgentSession {
    * 只有在本轮 turn 显式带来一个能解析的模型时才清掉此标记并放行，否则诚实报错。
    */
   modelFallback?: boolean;
+  /**
+   * 本会话的系统提示词与工具集。agent 每次请求前都读它装 system 头，改写字段即在下一次
+   * 请求生效（派发前刷新提示词、MCP 配置变更重建工具）。不经 `agent.state`：pi 1.0 的
+   * `state.systemPrompt` 只读、由 transcript 里的 system 消息推导；`state.tools` 一旦
+   * 非空就与 transcript 的工具声明不一致，loop 会往 transcript 插工具变更 system 消息。
+   * 本会话的 transcript 不含 system 消息（见 agent/factory.ts）。
+   */
+  preamble: AgentPreamble;
   /** Unified interactive tool bridge manager for this session. */
   toolCtx: SessionToolContext;
   /**
@@ -510,7 +521,7 @@ class SessionManager {
   /**
    * Rebuild every live session's tool array from current MCP + search-engine config.
    * Called when the user adds, removes, enables, disables, or edits an MCP
-   * server, or changes the search-engine list. The agent's `state.tools` setter accepts a fresh array, so a
+   * server, or changes the search-engine list. The agent reads `preamble.tools` before every request, so a
    * mid-run update is safe — the next assistant turn picks up the new tools.
    *
    * Sessions refresh in parallel; manager-level dedup prevents fan-out reconnects.
@@ -521,7 +532,7 @@ class SessionManager {
       Array.from(this.sessions.values()).map(async (agentSession) => {
         try {
           const tools = await buildSessionToolArray(agentSession.toolCtx);
-          agentSession.agent.state.tools = tools;
+          agentSession.preamble.tools = tools;
         } catch (err) {
           console.warn(`[tools] failed to refresh tools for session ${agentSession.sessionId}:`, err);
         }
@@ -809,16 +820,18 @@ class SessionManager {
     // systemPrompt 一次成形（含 skills 索引 + 用户指令）。composeSystemPrompt 是
     // systemPrompt 的单一来源，与切模型 / retry / 派发前刷新走同一条路径，保证四处
     // 产出逐字节一致。
-    const systemPrompt = await composeSystemPrompt(sessionId);
+    const preamble: AgentPreamble = {
+      systemPrompt: await composeSystemPrompt(sessionId),
+      tools: sessionTools,
+    };
 
     // 档位夹到该模型支持范围：off→强制思考模型取最低支持档、超限档取上限、未知值兜底，
     // 保证实际发出的 effective 档与 ChatInput 的 displayThinkingLevel 一致
     const agent = createCebianAgent({
       model: resolved.model,
-      systemPrompt,
+      preamble,
       thinkingLevel: clampThinkingLevel(resolved.model, (thinkingLvl || 'medium') as ThinkingLevel),
       messages,
-      tools: sessionTools,
       beforeToolCall,
       providerRetry: {
         onRetry: (status) => this.setRetryStatus(sessionId, status),
@@ -828,7 +841,13 @@ class SessionManager {
       // 做法）——agent 先于 AgentSession 构造，这里还拿不到它的引用。
       prepareNextTurnWithContext: (turn, signal) =>
         this.compactMidTurn(sessionId, turn.context, signal),
-      shouldStopAfterTurn: (_turn, signal) => this.shouldStopForContext(sessionId, signal),
+      // error / aborted 的 turn 也会走到这里（返回值被忽略），而停轮判据会追加一条说明
+      // 消息，所以只对正常结束的 turn 判。
+      finishTurn: async (turn, signal) => {
+        const { stopReason } = turn.message;
+        if (stopReason === 'error' || stopReason === 'aborted') return undefined;
+        return (await this.shouldStopForContext(sessionId, signal)) ? { action: 'end' } : undefined;
+      },
     });
 
     const agentSession: AgentSession = {
@@ -837,6 +856,7 @@ class SessionManager {
       sessionCreated,
       phase: 'idle',
       modelKey: `${resolved.provider}/${resolved.modelId}`,
+      preamble,
       ...(usedFallback ? { modelFallback: true } : {}),
       toolCtx,
       permissionBridge,
@@ -905,7 +925,19 @@ class SessionManager {
         // 状态机硬约束：进入 running 的唯一入口就是本事件，且只能从
         // preparing / idle 前进（preparing → running 单向不可逆）。其他
         // 任何地方不准手动置 running；这里断言锁死方向。
-        if (agentSession.phase !== 'preparing' && agentSession.phase !== 'idle') {
+        //
+        // 例外：手动压缩（`compact()`）占着 compacting 时，是准备阶段已越过 idle 门的 prompt
+        // 在压缩期间开跑。让用户消息优先：中止在途摘要，compact() 随后静默放弃。只认手动
+        // 压缩——轮首自动压缩被抢跑属于既有的并发 prompt 竞态，其取消收尾会提交待投递消息并
+        // 广播停止，不能在这里触发。
+        if (
+          agentSession.phase === 'compacting' &&
+          agentSession.manualCompaction &&
+          agentSession.compactionController === agentSession.manualCompaction
+        ) {
+          agentSession.manualCompaction.abort();
+          agentSession.manualCompaction = undefined;
+        } else if (agentSession.phase !== 'preparing' && agentSession.phase !== 'idle') {
           console.warn(
             `[session-manager] agent_start from unexpected phase '${agentSession.phase}' for ${sessionId}`,
           );
@@ -1081,6 +1113,14 @@ class SessionManager {
         if (!resolved) throw new Error(t('errors.modelUnavailable'));
         agentSession.agent.state.model = resolved.model;
         agentSession.modelKey = turnKey!;
+      } else if (turnKey != null) {
+        // 同一个模型也按最新配置重新解析：设置页改了自定义模型（工具调用开关、上下文窗口
+        // 等）要对已打开的对话生效（#83），否则会话一直用建会话时解析出的旧对象。解析失败
+        // 就沿用当前对象——是否报错仍按原来的路径决定，这里只做刷新。
+        const refreshed = await this.resolveSessionModel(turn.model);
+        // await 期间另一窗口可能已换了模型：只在选择仍是这个模型时写回，免得 state.model 与
+        // modelKey 对不上
+        if (refreshed && agentSession.modelKey === turnKey) agentSession.agent.state.model = refreshed.model;
       }
       // 思考档：把 turn 携带的原始偏好对（可能刚换的）当前模型夹成 effective 档，只有
       // effective 变了才更新 + 落库。这样「只换模型、档位没跟着换但新模型不支持现档」也会
@@ -1110,77 +1150,96 @@ class SessionManager {
       if (clearedFallback) agentSession.modelFallback = false;
     }
 
-    // 本轮记忆开关的单一快照：同时喂给 user 消息注入与 system prompt 刷新，
-    // 保证一轮内两处读同一个值（原子门控，避免读到两个快照而前后不一致）。
-    const memoryEnabled = (await memorySettings.getValue()).enabled;
-    const enriched = await composeUserMessage(text, attachments, memoryEnabled, slashPrompt);
+    // 录制附件里的 HAR 写进会话工作目录，消息里只带相对路径。放在忙碌 / 模型检查之后；
+    // 之后这一轮仍可能没发出去（被取消、会话被删、撞上进行中的一轮），见下面的 handedOff
+    const { attachments: sentAttachments, written: writtenHars } = await saveRecordingHars(sessionId, attachments);
+    // 这一轮的用户消息是否已经交出去（交给 agent 或已提交进转录）。没交出去就删掉上面写下的
+    // HAR，不留没有消息指向的文件；抛错的出口同样适用
+    let handedOff = false;
+    try {
+      // 本轮记忆开关的单一快照：同时喂给 user 消息注入与 system prompt 刷新，
+      // 保证一轮内两处读同一个值（原子门控，避免读到两个快照而前后不一致）。
+      const memoryEnabled = (await memorySettings.getValue()).enabled;
+      const enriched = await composeUserMessage(text, sentAttachments, memoryEnabled, slashPrompt);
 
-    const images = extractImages(attachments);
+      const images = extractImages(attachments);
 
-    // Liveness guard. Everything from `getOrCreateAgent` down to the dispatch
-    // below runs while `phase === 'idle'` (model resolve, settings reads,
-    // `composeUserMessage` — the latter can be slow for image
-    // attachments). A `cancel()` landing in that window takes its idle
-    // teardown branch (abort + dispose + `sessions.delete`), leaving `agentSession`
-    // detached. Dispatching now would steer/prompt a disposed agent, waste an
-    // API call, and let `maybeCompact`'s persist resurrect the deleted row.
-    // If the entry is gone (or was replaced), the user already stopped this
-    // turn — bail; `cancel()` already broadcast the authoritative end state.
-    if (this.sessions.get(sessionId) !== agentSession) return;
-
-    const refreshedSystemPrompt = await composeSystemPrompt(sessionId, memoryEnabled);
-    if (this.sessions.get(sessionId) !== agentSession) return;
-    agentSession.agent.state.systemPrompt = refreshedSystemPrompt;
-
-    // If any interactive tool OR a permission prompt is pending, the agent is
-    // paused waiting for the user — steer the new message into the loop and
-    // cancel the pending prompt instead of starting a fresh turn. A cancelled
-    // permission prompt surfaces as `dismissed` (implicit non-grant), which
-    // blocks the gated tool; the steered message then drives the next turn.
-    if (agentSession.toolCtx.hasPending() || agentSession.permissionBridge.getPending()) {
-      const content: any[] = [{ type: 'text', text: enriched }];
-      if (images.length > 0) content.push(...images);
-      const userMessage: AgentMessage = {
-        role: 'user',
-        content,
-        timestamp: Date.now(),
-      } as AgentMessage;
-      // Enqueue BEFORE cancelling so getSteeringMessages() sees it when the loop drains.
-      agentSession.agent.steer(userMessage);
-      agentSession.toolCtx.cancelAll();
-      agentSession.permissionBridge.cancel();
-    } else {
-      // 构造本轮「待投递」的用户消息，形状对齐 steering 分支。压缩成功路径不会
-      // 用它（由 agent.prompt() 自行 append 真实用户消息），它只用于压缩期间的
-      // 广播展示，以及压缩中取消时补进 state 充当「已取消」前的那条用户气泡。
-      const pendingContent: any[] = [{ type: 'text', text: enriched }];
-      if (images.length > 0) pendingContent.push(...images);
-      const pendingUserMessage: AgentMessage = {
-        role: 'user',
-        content: pendingContent,
-        timestamp: Date.now(),
-      } as AgentMessage;
-
-      // 压缩设置在进入下面的 idle 门之前读完，读完再做一次与上面同款的存活性检查。
-      // 不能把这个 await 挪进 maybeCompact：从「判定该不该压缩」到「同步占住
-      // phase='compacting'」之间一旦出现 await，两个并发 prompt 会各自通过 idle 门、
-      // 先后进入压缩并互相覆盖 compactionController——取消只找得到后一个，而任一路的
-      // finally 都会把它清掉，于是另一路变成不可取消的孤儿。
-      const compaction = resolveCompactionSettings(await compactionSettings.getValue());
+      // Liveness guard. Everything from `getOrCreateAgent` down to the dispatch
+      // below runs while `phase === 'idle'` (model resolve, settings reads,
+      // `composeUserMessage` — the latter can be slow for image
+      // attachments). A `cancel()` landing in that window takes its idle
+      // teardown branch (abort + dispose + `sessions.delete`), leaving `agentSession`
+      // detached. Dispatching now would steer/prompt a disposed agent, waste an
+      // API call, and let `maybeCompact`'s persist resurrect the deleted row.
+      // If the entry is gone (or was replaced), the user already stopped this
+      // turn — bail; `cancel()` already broadcast the authoritative end state.
       if (this.sessions.get(sessionId) !== agentSession) return;
 
-      // Before a fresh turn, compact the transcript if the context is over
-      // threshold (state layer: generate + insert summary + persist +
-      // broadcast). Gated on `phase === 'idle'`: a stale prompt arriving
-      // mid-run (phase 'running', no pending tool) must NOT enter compaction
-      // and clobber the phase machine — compaction is strictly a
-      // start-of-turn step. 返回 true = 放弃本轮（压缩中被取消，或上下文已满且压不动，
-      // 后者已把用户消息连同说明提交进转录），此时不再派发给模型。
-      if (agentSession.phase === 'idle') {
-        const cancelled = await this.maybeCompact(agentSession, pendingUserMessage, compaction);
-        if (cancelled) return;
+      const refreshedSystemPrompt = await composeSystemPrompt(sessionId, memoryEnabled);
+      if (this.sessions.get(sessionId) !== agentSession) return;
+      agentSession.preamble.systemPrompt = refreshedSystemPrompt;
+
+      // If any interactive tool OR a permission prompt is pending, the agent is
+      // paused waiting for the user — steer the new message into the loop and
+      // cancel the pending prompt instead of starting a fresh turn. A cancelled
+      // permission prompt surfaces as `dismissed` (implicit non-grant), which
+      // blocks the gated tool; the steered message then drives the next turn.
+      if (agentSession.toolCtx.hasPending() || agentSession.permissionBridge.getPending()) {
+        const content: any[] = [{ type: 'text', text: enriched }];
+        if (images.length > 0) content.push(...images);
+        const userMessage: AgentMessage = {
+          role: 'user',
+          content,
+          timestamp: Date.now(),
+        } as AgentMessage;
+        // Enqueue BEFORE cancelling so getSteeringMessages() sees it when the loop drains.
+        handedOff = true;
+        agentSession.agent.steer(userMessage);
+        agentSession.toolCtx.cancelAll();
+        agentSession.permissionBridge.cancel();
+      } else {
+        // 构造本轮「待投递」的用户消息，形状对齐 steering 分支。压缩成功路径不会
+        // 用它（由 agent.prompt() 自行 append 真实用户消息），它只用于压缩期间的
+        // 广播展示，以及压缩中取消时补进 state 充当「已取消」前的那条用户气泡。
+        const pendingContent: any[] = [{ type: 'text', text: enriched }];
+        if (images.length > 0) pendingContent.push(...images);
+        const pendingUserMessage: AgentMessage = {
+          role: 'user',
+          content: pendingContent,
+          timestamp: Date.now(),
+        } as AgentMessage;
+
+        // 压缩设置在进入下面的 idle 门之前读完，读完再做一次与上面同款的存活性检查。
+        // 不能把这个 await 挪进 maybeCompact：从「判定该不该压缩」到「同步占住
+        // phase='compacting'」之间一旦出现 await，两个并发 prompt 会各自通过 idle 门、
+        // 先后进入压缩并互相覆盖 compactionController——取消只找得到后一个，而任一路的
+        // finally 都会把它清掉，于是另一路变成不可取消的孤儿。
+        const compaction = resolveCompactionSettings(await compactionSettings.getValue());
+        if (this.sessions.get(sessionId) !== agentSession) return;
+
+        // Before a fresh turn, compact the transcript if the context is over
+        // threshold (state layer: generate + insert summary + persist +
+        // broadcast). Gated on `phase === 'idle'`: a stale prompt arriving
+        // mid-run (phase 'running', no pending tool) must NOT enter compaction
+        // and clobber the phase machine — compaction is strictly a
+        // start-of-turn step. 返回 true = 放弃本轮（压缩中被取消，或上下文已满且压不动，
+        // 后者已把用户消息连同说明提交进转录），此时不再派发给模型。
+        if (agentSession.phase === 'idle') {
+          const cancelled = await this.maybeCompact(agentSession, pendingUserMessage, compaction);
+          // 放弃本轮时用户消息通常已连同说明提交进转录（HAR 有消息指向，保留）；会话已被
+          // 销毁时则没有提交，以消息是否真的在转录里为准
+          if (cancelled) {
+            handedOff = agentSession.agent.state.messages.includes(pendingUserMessage);
+            return;
+          }
+        }
+        // 进行中的一轮还没结束（过期的 IPC）时下面的 prompt 会同步抛错，消息不进转录。判断与
+        // 调用之间不能有 await，否则那一轮可能恰好结束，这条消息就带着已删掉的 HAR 发出去
+        handedOff = !agentSession.agent.state.isStreaming;
+        await agentSession.agent.prompt(enriched, images.length > 0 ? images : undefined);
       }
-      await agentSession.agent.prompt(enriched, images.length > 0 ? images : undefined);
+    } finally {
+      if (!handedOff) await discardRecordingHars(sessionId, writtenHars);
     }
   }
 
@@ -1298,6 +1357,116 @@ class SessionManager {
   }
 
   /**
+   * 手动压缩（issue #85）：用户在占用小窗里点「立即压缩」。
+   *
+   * 与轮首 `maybeCompact` 共用摘要生成与落库（`summarizeForPlan` / `applyCompaction`），差别：
+   * - 判定走 `planManualCompaction`：不看自动压缩开关与阈值。不值得压时只补发一帧占用纠正
+   *   界面——按钮本不该出现，多半是过期的点击，不报错；
+   * - 没有待投递的用户消息：被取消就什么都不改，直接复位；
+   * - 摘要失败不落 `dropped` 标记。自动那条路丢历史是因为已经超窗、不丢就卡死；手动是
+   *   可选操作，失败应原样保留并报错。
+   *
+   * 并发：
+   * - 压缩设置与在途树操作在 idle 判定之前等完，从判定到同步占住 `phase = 'compacting'`
+   *   之间没有 await（同 `maybeCompact`）；
+   * - 会中止本次压缩的有：`cancel()`（含空闲收尾）、`destroySession()`、被 prompt 抢先时的
+   *   `agent_start`。它们只 abort，复位与广播由本方法收尾；
+   * - 收尾只在本次压缩仍持有 `compactionController` 时进行：迟到的旧压缩（卡在不认 abort 的
+   *   凭证解析上）不能清掉后来者的 controller、把它的 compacting 复位成 idle；
+   * - 失去会话（被中止 / 抢先 / 出表 / 消息被改）时一律静默退出，连摘要请求抛错也不上报——
+   *   此时报错会把正在运行的另一轮在界面上误标成已停止。
+   */
+  async compact(sessionId: string): Promise<void> {
+    // 会话行不存在（另一窗口已删除，这是过期的点击）：别为它建一个占位 agent——之后同 id 的
+    // prompt 会复用它而跳过建行。判据同 prompt()。
+    if (!this.sessions.has(sessionId) && !(await sessionStore.load(sessionId))) return;
+    const agentSession = await this.getOrCreateAgent(sessionId);
+    if (!agentSession.sessionCreated) return;
+    // 会话挂着顶上来的兜底模型时，摘要会悄悄用另一个模型发出——与 prompt 一样拒绝（issue #62）。
+    if (agentSession.modelFallback) throw new Error(t('errors.modelUnavailable'));
+    const settings = resolveCompactionSettings(await compactionSettings.getValue());
+    // 等已受理的树操作落定（如 switchBranch 不占 phase，判完 idle 后在链上重投影）：否则它会在
+    // 压缩之后整体替换消息，把刚落的摘要冲掉。之后才入链的切分支会在链内复检 phase 而放弃。
+    await this.flushTree(agentSession);
+    // 等待期间会话可能已被销毁 / 同 id 重建
+    if (this.sessions.get(sessionId) !== agentSession) return;
+    if (agentSession.phase !== 'idle') {
+      console.debug('[session-manager] compact: phase not idle, ignored', sessionId, agentSession.phase);
+      return;
+    }
+    const state = agentSession.agent.state;
+    const decision = planManualCompaction({
+      messages: state.messages,
+      settings,
+      contextWindow: state.model.contextWindow,
+      ...requestPreamble(agentSession.preamble, state.model),
+    });
+    if (decision.kind !== 'compact') {
+      this.pushContextUsage(sessionId);
+      return;
+    }
+    const { plan } = decision;
+    // 计划所依据的消息序列。state.messages 的 setter 会换成新数组、message_end 原地 push，
+    // 所以「同一引用 + 同一长度」就说明摘要期间没人动过它。
+    const source = state.messages;
+    const sourceLength = source.length;
+
+    // 占住可取消的忙碌态（自动保活 + 挡住新的 prompt / 重试 / 切分支），界面据 isCompacting
+    // 显示压缩中。判定到这里之间没有 await。
+    agentSession.phase = 'compacting';
+    const controller = new AbortController();
+    agentSession.compactionController = controller;
+    agentSession.manualCompaction = controller;
+    const { signal } = controller;
+    this.updateKeepAlive();
+    this.broadcastSessionSnapshot(agentSession);
+
+    // 本次压缩是否仍掌管会话。不掌管的情形（都静默放弃、什么都不改）：
+    // - 取消 / 会话被销毁 / 被 prompt 抢先（signal 被 abort；抢先时 phase 已推进到 running）；
+    // - 会话已出表（取消的空闲收尾判过 idle 后摘除了会话）；
+    // - 消息序列被别的路径改过：拿旧序列覆盖会吞掉新消息并让水位线与状态错位。
+    const ownsSession = () =>
+      !signal.aborted &&
+      agentSession.compactionController === controller &&
+      agentSession.phase === 'compacting' &&
+      this.sessions.get(sessionId) === agentSession &&
+      agentSession.agent.state.messages === source &&
+      source.length === sourceLength;
+
+    try {
+      let marker: CompactionSummaryMessage | null;
+      try {
+        marker = await this.summarizeForPlan(agentSession, plan, signal);
+      } catch (err) {
+        if (!ownsSession()) return;
+        throw err;
+      }
+      // 必须先于「摘要失败」的判断：失去会话时报错会误标正在运行的另一轮
+      if (!ownsSession()) return;
+      // 无凭证：摘要请求发不出去
+      if (!marker) throw new Error(t('errors.compactionUnavailable'));
+      if (marker.dropped) throw new Error(t('errors.compactionFailed'));
+      await this.applyCompaction(agentSession, plan, marker);
+    } finally {
+      // 只在仍持有 controller 时收尾：迟到的旧压缩不能动后来者的 controller 与 phase
+      if (agentSession.compactionController === controller) {
+        agentSession.compactionController = undefined;
+        // 被 prompt 抢先时 phase 已是 running，那一轮自己的广播才是权威，这里不复位也不广播
+        if (agentSession.phase === 'compacting') {
+          agentSession.phase = 'idle';
+          this.updateKeepAlive();
+          // 被 destroySession / 取消清理移出表时不再广播，免得给新会话的观众发旧数据
+          if (this.sessions.get(sessionId) === agentSession) {
+            this.broadcastSessionSnapshot(agentSession);
+            this.pushContextUsage(sessionId);
+          }
+        }
+      }
+      if (agentSession.manualCompaction === controller) agentSession.manualCompaction = undefined;
+    }
+  }
+
+  /**
    * 量一次当前上下文占用，由 `pushContextUsage` 经独立帧下发给前端画占用环。
    *
    * 与压缩判据共用 `measureContextUsage`，保证界面上的数字就是压缩真正用的那个。
@@ -1313,8 +1482,8 @@ class SessionManager {
       messages: state.messages,
       settings,
       contextWindow: state.model.contextWindow,
-      systemPrompt: state.systemPrompt,
-      tools: state.tools,
+      // 按本模型实际发出的提示词与工具估算（关掉工具调用的模型不声明工具、多一段说明）
+      ...requestPreamble(agentSession.preamble, state.model),
     });
   }
 
@@ -1394,8 +1563,8 @@ class SessionManager {
       messages: state.messages,
       settings,
       contextWindow: state.model.contextWindow,
-      systemPrompt: state.systemPrompt,
-      tools: state.tools,
+      // 按本模型实际发出的提示词与工具估算（关掉工具调用的模型不声明工具、多一段说明）
+      ...requestPreamble(agentSession.preamble, state.model),
     });
   }
 
@@ -1523,7 +1692,7 @@ class SessionManager {
   /**
    * 轮内停轮判据：已经超阈值、却连切点都找不到（`stuck`）时收尾本次 run。
    *
-   * pi 的 loop 顺序是 `turn_end → shouldStopAfterTurn → prepareNextTurn → 下一次请求`，
+   * 经 `finishTurn` 调用；pi 的 loop 顺序是 `finishTurn → turn_end → prepareNextTurn → 下一次请求`，
    * 所以这里先于 {@link compactMidTurn} 执行，能在「压不动」的情况下把控制权交回用户，
    * 而不是继续跑到 provider 返回 400。这正是 issue #72 里用户要的「快到上限就中断」。
    *
@@ -1765,7 +1934,9 @@ class SessionManager {
         ? `${turn.model.provider}/${turn.model.modelId}`
         : null;
       const modelChanged = turnKey != null && turnKey !== agentSession.modelKey;
-      const resolved = modelChanged ? await this.resolveSessionModel(turn!.model) : null;
+      // 同一个模型也按最新配置重新解析（同 prompt），设置页改过的自定义模型配置对重试 /
+      // 编辑重发同样生效（#83）；只有换模型时解析失败才报错，否则沿用当前对象。
+      const resolved = turnKey != null ? await this.resolveSessionModel(turn!.model) : null;
       if (modelChanged && !resolved) throw new Error(t('errors.modelUnavailable'));
       // 兜底模型只有被本轮 turn 显式带来的模型解除后才允许重跑，语义同 prompt。
       const clearedFallback = turnKey != null && agentSession.modelFallback === true;
@@ -2103,6 +2274,8 @@ class SessionManager {
     }
 
     if (agentSession.phase === 'compacting') {
+      // 手动压缩（`compact()`）同样走这里：只 abort，复位与广播由它自己的 finally 负责。
+      //
       // A pre-turn compaction is running. Abort the in-flight
       // `generateSummary`; `maybeCompact()` detects the abort and routes to
       // `commitCompactionCancel()`, which commits the pending user message +
@@ -2163,8 +2336,10 @@ class SessionManager {
     // 分支信息须在会话出表前算（getBranchInfo 按 sessionId 查活会话）——中断的
     // retry / 编辑可能刚在树上造出新分支，撤下的 agent_end 帧要携带它
     const branchInfo = await this.getBranchInfo(sessionId).catch(() => undefined);
-    // 在途的自动标题一并取消：会话出表后 destroySession 就找不到它了。
+    // 在途的自动标题一并取消：会话出表后 destroySession 就找不到它了。清理期间（上面的
+    // await）可能有手动压缩判过 idle 后开始，同样中止。
     agentSession.titleController?.abort();
+    agentSession.compactionController?.abort();
     this.sessions.delete(sessionId);
     this.updateKeepAlive();
     // Ensure client knows the agent stopped (abort may not fire agent_end)

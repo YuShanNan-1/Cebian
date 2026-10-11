@@ -32,6 +32,13 @@ common:
   rename: "重命名"
   edit: "编辑"
   add: "添加"
+  # 通用多选文案（历史列表、模型列表等）
+  select: "选择"
+  selectAll: "全选"
+  # $1 = 已选中的条目数
+  selectedCount:
+    1: "已选 1 项"
+    n: "已选 $1 项"
   headers:
     keyPlaceholder: "Header 名"
     valuePlaceholder: "Header 值"
@@ -77,11 +84,6 @@ common:
     unpin: "取消置顶"
     archive: "归档"
     unarchive: "取消归档"
-    select: "选择"
-    # $1 = 已选中的会话数
-    selectedCount:
-      1: "已选 1 项"
-      n: "已选 $1 项"
     # $1 = 待删除的会话数
     deleteManyConfirmTitle:
       1: "删除该会话？"
@@ -454,6 +456,8 @@ settings:
       disconnected: "未连接"
       probing: "重连中"
       circuitOpen: "暂时不可用"
+      # $1 = 服务器或连接返回的错误信息
+      lastError: "最近一次错误：$1"
     form:
       name: "名称"
       namePlaceholder: "例如：weather、github、my-tools"
@@ -647,14 +651,31 @@ chat:
     recordingMeta: "$1 个事件 · $2"
     recordingTruncated: "已截断"
     recordingDownload: "下载录制 JSON"
-    # $1 = 事件数量, $2 = 简短字符数（如 1.2K、3M）
-    recordingHover: "$1 个事件 · 约 $2 字符"
+    # $1 = 简短字符数（如 1.2K、3M）
+    recordingChars: "约 $1 字符"
+    # $1 = 事件数量, $2 = 网络请求数量
+    recordingMetaNetwork: "$1 个事件 · $2 个请求"
+    # $1 = 被过滤的埋点 / 监控请求数量
+    recordingFiltered: "已过滤 $1 个"
+    recordingNetworkAborted: "网络录制已中止"
+    recordingNetworkUnavailable: "未能录制网络"
+    recordingHarFailed: "HAR 保存失败"
+    recordingHarDownload: "下载 HAR（完整网络记录）"
+    recordingHarOpen: "打开 HAR（完整网络记录）"
   recorder:
-    start: "开始录制用户操作"
+    start: "开始录制"
     stop: "停止录制（会随下一条消息发送）"
     startRejectedBusy: "另一个侧边栏正在录制，请先停止后再开始新的录制。"
     autoStoppedEvents: "录制已自动停止：达到事件上限"
     autoStoppedTime: "录制已自动停止：达到时长上限"
+    options: "录制选项"
+    interactions: "页面操作"
+    network: "网络请求"
+    noneSelected: "请先在录制选项里至少勾选一项"
+    networkHint: "录制期间浏览器窗口顶部会显示调试提示条，停止录制后消失（移动端模式仍开着时会保留）。点提示条上的「取消」会停止网络录制，移动端模式也会一起关闭。"
+    networkHintFirefox: "Firefox 下只记录请求信息，不记录响应内容。"
+    networkAborted: "调试提示条被取消，网络录制已停止。"
+    networkAbortedFirefox: "查看网络请求的权限已被移除，网络录制已停止。"
   askUser:
     placeholder: "输入回复…"
     # 多问题表单（翻页）：导航 + 每题交互
@@ -748,6 +769,8 @@ chat:
     threshold: "达到 $1% 时自动压缩较早的历史。"
     compactionOff: "未开启自动压缩。"
     estimateNote: "为估算值，实际计数取决于模型自己的分词器。"
+    # 立即压缩较早历史的按钮（issue #85）
+    compactNow: "立即压缩"
   compaction:
     # 历史压缩分割条上的标签
     divider: "此前上下文已压缩"
@@ -839,6 +862,9 @@ provider:
     maxTokens: "最大输出"
     maxTokensPlaceholder: "0（不限）"
     tokensHint: "留空即用默认 · 上下文窗口决定何时压缩历史，并非硬上限"
+    toolCalling: "工具调用"
+    toolCallingHint: "模型不支持 function calling 时关闭：请求不再携带工具，模型只能对话"
+    noTools: "无工具"
     manualModelPlaceholder: "手动输入 Model ID"
     addManual: "手动添加模型"
     advanced: "高级设置"
@@ -846,6 +872,15 @@ provider:
     authOverrideHint: "同时填了 API Key 和 Authorization 头，会优先用 API Key。若要用该 header 鉴权，请清空上面的 API Key。"
     addCustom: "添加自定义提供商"
     fetchFailed: "无法获取模型列表，请手动添加"
+    # 「自动获取」后勾选要添加哪些模型的弹窗（issue #86）
+    pickModels:
+      title: "选择要添加的模型"
+      description: "勾选的模型会加入列表，已在列表里但未勾选的会被移除；不在此次获取结果里的模型不受影响。"
+      search: "搜索模型"
+      # $1 = 已选数量，$2 = 提供商返回的模型总数
+      count: "已选 $1 / $2"
+      empty: "提供商没有返回任何模型，可以手动添加。"
+      noMatch: "没有匹配的模型"
 
 # ─── 工具运行时标签（在 ToolCard 中显示）───
 tools:
@@ -1035,6 +1070,9 @@ errors:
     invalid: "页面匹配规则格式错误。"
     duplicate: "该规则已存在。"
   modelUnavailable: "所选模型已不可用，请重新选择。"
+  # 手动压缩上下文失败（issue #85）
+  compactionUnavailable: "无法压缩上下文：所用模型没有可用的凭证，请检查提供商设置。"
+  compactionFailed: "上下文压缩失败，对话保持不变，请稍后重试。"
   pageActionGone: "找不到该操作。"
   pageActionSaveFailed: "保存失败，请重试。"
   compactionSettingsSaveFailed: "保存上下文压缩设置失败，请重试。"
@@ -1069,6 +1107,12 @@ errors:
     requestFailed: "请求失败：$1"
   mobile:
     toggleFailed: "移动端模式切换失败"
+  recorder:
+    networkPermissionDenied: "未授予查看网络请求的权限，不会录制网络请求。"
+    networkPermissionDeniedNotStarted: "未开始录制：未授予查看网络请求的权限，且未勾选页面操作。"
+    optionsChanged: "未开始录制：录制选项没有保存成功或刚被修改，请确认后重新开始。"
+    networkUnavailable: "无法录制此页面的网络请求，可能已有其他调试器连接到该页面。"
+    networkUnavailableFirefox: "当前无法在此浏览器中录制网络请求。"
   skillPackage:
     invalid: "无效的技能包。"
     tooLarge: "技能包过大。"

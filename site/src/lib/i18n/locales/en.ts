@@ -3,9 +3,12 @@ import type { Dict } from '../types';
 export const en: Dict = {
   site: {
     name: 'Cebian',
+    shareImageAlt: "Cebian open-source browser AI with your own model API, MCP, and Skills, alongside the real extension interface.",
+    seoTitle: "Cebian — Open-source AI browser sidebar with MCP and BYOK",
+    seoDescription: "An open-source AI sidebar for Chrome, Edge, and Firefox. Summarize pages, connect your own models, and use MCP tools and Skills. The extension is free; model services may charge.",
     tagline: 'An AI agent that runs in your browser sidebar',
     description:
-      "Cebian is an AI agent that lives in the browser sidebar: it reads the page, interacts with the browser, and extends its abilities through MCP and Skills. All data stays local in your browser, no account needed, connected straight to your own model API.",
+      "Cebian is an AI agent that lives in the browser sidebar: it reads the page, interacts with the browser, and extends its abilities through MCP and Skills. Conversations and settings are stored in your browser. No Cebian account is needed; you connect directly to your configured models and external services.",
   },
   nav: {
     home: 'Home',
@@ -52,7 +55,7 @@ export const en: Dict = {
     },
     trust: [
       { title: 'AGPL-3.0 open source', note: 'Every line is auditable' },
-      { title: 'Privacy first', note: 'Data stays on your device' },
+      { title: 'Privacy first', note: 'Local data storage' },
       { title: 'No account, no credits', note: 'No sign-in, install and go' },
       { title: 'Your own API', note: '10+ providers' },
     ],
@@ -88,7 +91,7 @@ export const en: Dict = {
       mcpTitle: 'MCP tools',
       mcpBody: 'A built-in MCP client connects external tools over HTTP, plug-and-play; it also supports MCP Apps with interactive UIs.',
       privacyTitle: 'Local-first, verifiable',
-      privacyBody: 'Conversations, prompts, Skills, and attachments all live in your browser. Apart from the requests needed to reach your model provider, nothing is uploaded to any server.',
+      privacyBody: 'Conversations, prompts, Skills, and attachments are stored in your browser. Model requests, MCP, cloud speech recognition, and WebDAV backups send the relevant data to their respective services.',
       privacyNote: 'All code is open and auditable',
     },
     install: {
@@ -96,6 +99,7 @@ export const en: Dict = {
       lead: 'Store builds are reviewed and easiest to install; GitHub Release is always the latest. Choose one, then enter your own model API key.',
       latestBadge: 'Latest',
       steps: ['Download zip', 'Unzip to a fixed folder', 'Load in the extensions page'],
+      costNote: "The Cebian extension is free and open source; third-party model APIs or subscriptions may charge separately.",
       goCta: 'Install',
       options: {
         github: {
@@ -172,7 +176,7 @@ export const en: Dict = {
     title: 'About Cebian',
     lead: 'Cebian is an open-source AI agent that runs in your browser sidebar, maintained by maotoumao.',
     whatTitle: 'What is Cebian',
-    whatBody: 'Cebian runs in your browser sidebar — it can read the page you are looking at, call tools, use MCP and Skills, and carry out the tasks you ask of it. It runs locally and never uploads your information to any third party other than your model provider.',
+    whatBody: 'Cebian runs in your browser sidebar — it can read the page you are looking at, call tools, use MCP and Skills, and carry out the tasks you ask of it. Conversations and settings are stored locally; model requests and other network features send the relevant data to their respective services.',
     authorTitle: 'Author',
     authorBody: 'Cebian is built and maintained by maotoumao.',
     licenseTitle: 'License',

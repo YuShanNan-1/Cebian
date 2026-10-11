@@ -1,9 +1,16 @@
 ---
 title: Provider list
 description: An overview of the model providers Cebian supports.
+seoTitle: "Cebian model setup: API keys, Ollama, LM Studio, and providers"
+seoDescription: "Configure model providers or OpenAI-compatible endpoints, Base URLs, headers, model selection, and vision or tool-calling capabilities."
 group: reference
 order: 1
 ---
+
+import { Image } from 'astro:assets';
+import ModelCapabilitiesShot from '@/assets/docs/model-capabilities.png';
+import ModelPickerShot from '@/assets/docs/model-picker.png';
+import ModelSelectionShot from '@/assets/docs/model-selection.png';
 
 Cebian itself doesn't provide model credits. You need to connect your own existing subscription or API Key under "Settings → AI providers", then select a model in the chat input box.
 
@@ -56,4 +63,47 @@ Common scenarios include:
 - Your own deployment of vLLM, LiteLLM, or a gateway service
 - An OpenAI-compatible interface inside your company
 
-When adding one, enter the name, Base URL, and API Key (if required), then add or automatically fetch the model list.
+Add a custom Provider under "Settings → AI providers", enter its name, Base URL, and API Key if required, and include at least one model. Custom Providers use the OpenAI Chat Completions-compatible protocol.
+
+### Choosing the Base URL
+
+Use the API base address, not a website homepage or the full `/chat/completions` endpoint. Model fetching appends `/models`; Cebian does not add `/v1` for you.
+
+| Example service | Example Base URL |
+| --- | --- |
+| Local Ollama | `http://localhost:11434/v1` |
+| Local LM Studio | `http://localhost:1234/v1` |
+| OpenAI-compatible gateway | `https://api.example.com/v1` |
+
+Use the port and path configured by your service. `localhost` refers to the device running the browser. Leave the API Key empty if the service needs no authentication. Saving a custom Provider does not run a connectivity test; "Configured" does not guarantee requests will succeed.
+
+### Custom headers
+
+Under "Advanced", add any required headers, such as a gateway's `api-key`. Headers are used for both model fetching and conversation requests. To authenticate through a custom `Authorization` header, clear the API Key field; if both are supplied, the API Key takes precedence and the form shows a warning.
+
+In backups, models and endpoints belong to "General settings", while API Keys and all custom headers belong to "Secrets". Include both categories when migrating the full configuration.
+
+## Custom model controls
+
+In the custom provider editor, open the settings beside a model to set its context window, maximum output, reasoning, and multimodal capabilities. Use values supported by the actual service; a switch cannot add a capability the service does not have.
+
+For a model without tool support, turn off "Tool calling" to use it for ordinary chat. It will not be able to call browser, file, or MCP tools.
+
+<Image src={ModelCapabilitiesShot} alt="Custom model settings for context window, maximum output, and capability switches" loading="lazy" />
+
+### Fetching and selecting models
+
+Click "Auto-fetch", search and check models in the picker, then confirm:
+
+- Models in this fetched list follow your selection; unchecking an existing model removes it from the draft.
+- Existing models that remain selected retain their reasoning, multimodal, tool-calling, context-window, and maximum-output settings.
+- Existing models absent from the fetched list, including unlisted manual entries, stay unchanged. A manual entry that also appears in the fetched list follows the selection like any other model.
+- Canceling the picker leaves the list unchanged. Confirming only edits the draft; click "Add" or "Save" to apply it.
+
+If fetching fails or the list is incomplete, manually add the exact model ID supplied by the service. Check the Base URL, authentication, and network first. Fetching successfully only confirms access to the model directory, not permission to use every model or support for tools.
+
+<Image src={ModelPickerShot} alt="Searchable remote-model picker using demo model entries" loading="lazy" />
+
+Click "Select" beside the model list to check several models or select all, then delete them together. Deletion only changes the form draft until you click "Save"; "Cancel" discards the edit.
+
+<Image src={ModelSelectionShot} alt="Model multi-select with two entries selected, a partial-selection state, and a delete action" loading="lazy" />
