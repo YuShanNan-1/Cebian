@@ -37,8 +37,7 @@ import {
 } from '@/lib/agent/compaction-summary';
 import { sanitizeAgentMessages } from '@/lib/agent/message-helpers';
 import {
-  CHAT_PROVIDER_MAX_RETRIES,
-  observeProviderRetries,
+  withProviderRetries,
   type ProviderRetryStatus,
 } from '@/lib/agent/provider-retry';
 import { supportsToolCalling } from '@/lib/providers/custom-models';
@@ -178,20 +177,7 @@ function createCebianAgent(options: CreateAgentOptions): Agent {
   } = options;
 
   const streamFn = providerRetry
-    ? (requestModel: Model<Api>, requestContext: Parameters<typeof streamSimple>[1], streamOptions?: Parameters<typeof streamSimple>[2]) => {
-      const baseFetch = streamOptions?.fetch ?? globalThis.fetch.bind(globalThis);
-      const observedFetch = observeProviderRetries(
-        baseFetch,
-        CHAT_PROVIDER_MAX_RETRIES,
-        providerRetry.onRetry,
-        providerRetry.onSettled,
-      );
-      return streamSimple(requestModel, requestContext, {
-        ...streamOptions,
-        maxRetries: CHAT_PROVIDER_MAX_RETRIES,
-        fetch: observedFetch,
-      });
-    }
+    ? withProviderRetries(streamSimple, providerRetry)
     : streamSimple;
 
   // 本次请求的模型能否调用工具：prepareRequest 记下，同一次请求随后的 convertToLlm 据此决定

@@ -18,19 +18,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## 1.8.1-beta.2 - 2026-10-16
+
 ### 新增 / Added
 
+- 自定义提供商支持选择 Chat Completions 或 Responses API，已有配置默认沿用 Chat Completions。
 - 新增 `skill.assets.read` 技能权限，允许技能只读访问自身目录内随附的本地资源文件；资源访问限制在当前技能目录内，不新增网络权限。
 - 设置 → 外观新增「语言」：可在跟随浏览器、English、简体中文、繁體中文之间切换界面语言，选择会被记住。在设置页切换后当前页面立即生效，其他已打开的页面重新打开或刷新后生效；划词翻译的默认目标语言、斜杠提示词里的 `{{ui_language}}`、日期格式与语音识别也随之切换。扩展名称等由浏览器自身显示的内容仍跟随浏览器语言 ([#50](https://github.com/maotoumao/Cebian/issues/50))
 
+- Custom providers support choosing Chat Completions or the Responses API; existing configurations continue to use Chat Completions by default.
 - Add the `skill.assets.read` skill permission, allowing skills to read bundled local resource files from their own directory; access is restricted to the current skill directory and does not add network permission.
 - Settings → Appearance gains a "Language" option: switch the interface between Follow browser, English, 简体中文 and 繁體中文, and the choice is remembered. The settings page you change it in switches right away; other open pages switch after you reopen or refresh them. The default target language of selection translation, `{{ui_language}}` in slash prompts, date formats and speech recognition follow it too. The extension name and other text shown by the browser itself still follow the browser language ([#50](https://github.com/maotoumao/Cebian/issues/50))
 
 ### 变更 / Changed
 
-- 聊天请求遇到临时服务或网络错误时会自动重试最多 3 次，并在重试期间同步显示当前尝试次数；最终失败仍可手动重试。
+- 聊天请求遇到临时服务或网络错误时会自动重试最多 5 次，等待间隔依次为 2 秒、5 秒、10 秒、10 秒、10 秒，并在重试期间同步显示当前尝试次数；最终失败仍可手动重试。
 
-- Chat requests now automatically retry up to 3 times for transient service or network errors, with the current attempt shown during the retry; a manual retry remains available after the final failure.
+- Chat requests now automatically retry up to 5 times for transient service or network errors, with delays of 2, 5, 10, 10 and 10 seconds between attempts and the current attempt shown during the retry; a manual retry remains available after the final failure.
 
 ## 1.8.1 - 2026-10-10
 

@@ -62,6 +62,8 @@ export interface CustomProviderConfig {
   id: string;
   name: string;
   baseUrl: string;
+  /** 缺省沿用 Chat Completions，兼容已有提供商配置。 */
+  api?: 'openai-completions' | 'openai-responses';
   models: CustomModelDef[];
   /** 用户自定义请求头（可能含密钥，如 Authorization / api-key）；备份时整体视为密钥 */
   headers?: Record<string, string>;

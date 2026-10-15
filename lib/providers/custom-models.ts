@@ -25,10 +25,11 @@ export const DEFAULT_MAX_TOKENS = 0;
 
 /** Convert a CustomProviderConfig + CustomModelDef into a pi-ai Model object */
 export function toModel(config: CustomProviderConfig, model: CustomModelDef): Model<Api> {
+  const api = config.api === 'openai-responses' ? 'openai-responses' : 'openai-completions';
   const base: Model<Api> = {
     id: model.modelId,
     name: model.name,
-    api: 'openai-completions' as Api,
+    api: api as Api,
     provider: customProviderKey(config.id),
     baseUrl: config.baseUrl,
     reasoning: model.reasoning,
@@ -42,7 +43,9 @@ export function toModel(config: CustomProviderConfig, model: CustomModelDef): Mo
     //   system 会自动为推理模型转换），第三方普遍直接 400，一律用 system (#46 #57)
     // - maxTokensField: 第三方普遍只认原始的 max_tokens，发 max_completion_tokens 会被
     //   静默忽略，导致「最大输出」设置不生效、被服务端默认上限截断 (#54)
-    compat: { supportsDeveloperRole: false, maxTokensField: 'max_tokens' },
+    compat: api === 'openai-completions'
+      ? { supportsDeveloperRole: false, maxTokensField: 'max_tokens' }
+      : undefined,
   };
   // 用户自定义请求头并进 model.headers（pi-ai 会合并进请求头）；仅非空时附加
   if (config.headers && Object.keys(config.headers).length > 0) {

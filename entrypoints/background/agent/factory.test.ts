@@ -3,6 +3,7 @@ import { fakeBrowser } from 'wxt/testing/fake-browser';
 import type { AgentEvent, AgentMessage, AgentTool } from '@earendil-works/pi-agent-core';
 import {
   createAssistantMessageEventStream,
+  normalizeContext,
   Type,
   type Api,
   type AssistantMessage,
@@ -12,6 +13,7 @@ import {
 } from '@earendil-works/pi-ai';
 import { streamSimple } from '@earendil-works/pi-ai/compat';
 import { createCompactionSummaryMessage } from '@/lib/agent/compaction-summary';
+import { CHAT_PROVIDER_MAX_RETRIES } from '@/lib/agent/provider-retry';
 import { toModel } from '@/lib/providers/custom-models';
 import { createCebianAgent, type AgentPreamble } from './factory';
 import { NO_TOOLS_NOTE } from './system-prompt';
@@ -87,6 +89,43 @@ function userMessage(text: string): AgentMessage {
 function toolNames(message: Message | undefined): string[] {
   return message?.role === 'system' ? (message.toolsAdded ?? []).map((tool) => tool.name) : [];
 }
+
+describe('createCebianAgent · 聊天重试接入', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('只有显式启用的聊天 Agent 使用重试策略', () => {
+    const options = { model, preamble: { systemPrompt: 'test', tools: [] }, thinkingLevel: 'off' as const };
+    expect(createCebianAgent(options).streamFunction).toBe(streamSimple);
+    expect(createCebianAgent({
+      ...options, providerRetry: { onRetry: vi.fn(), onSettled: vi.fn() },
+    }).streamFunction).not.toBe(streamSimple);
+  });
+
+  it('五次重试共六次请求，请求内容保持一致且失败后只交付一次错误', async () => {
+    vi.useFakeTimers();
+    const callbacks = { onRetry: vi.fn(), onSettled: vi.fn() };
+    const agent = createCebianAgent({
+      model, preamble: { systemPrompt: 'test', tools: [] }, thinkingLevel: 'off', providerRetry: callbacks,
+    });
+    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async () => new Response('Temporary failure', { status: 500 }));
+    const stream = await agent.streamFunction(model, normalizeContext({ messages: [{ role: 'user', content: 'same request', timestamp: 0 }] }), {
+      apiKey: 'test-key', fetch: fetchImpl,
+    });
+    const eventTypes: string[] = [];
+    const collect = (async () => { for await (const event of stream) eventTypes.push(event.type); })();
+    // 适配器首次动态加载使用真实任务队列，先等第一条重试通知。
+    await vi.waitFor(() => expect(callbacks.onRetry).toHaveBeenCalledOnce());
+    await vi.runAllTimersAsync();
+    await collect;
+
+    expect(fetchImpl).toHaveBeenCalledTimes(CHAT_PROVIDER_MAX_RETRIES + 1);
+    expect(new Set(fetchImpl.mock.calls.map(([, init]) => init?.body)).size).toBe(1);
+    expect(eventTypes).toEqual(['error']);
+    expect(callbacks.onSettled).toHaveBeenCalledOnce();
+  });
+});
 
 describe('createCebianAgent · system 头', () => {
   beforeEach(() => {

@@ -1,8 +1,9 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useId } from 'react';
 import { Plus, Trash2, Pencil } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { PasswordInput } from '@/components/ui/password-input';
 import { Label } from '@/components/ui/label';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -19,6 +20,7 @@ import { t } from '@/lib/i18n';
 interface ProviderFormFields {
   name: string;
   baseUrl: string;
+  api: NonNullable<CustomProviderConfig['api']>;
   apiKey: string;
   models: CustomModelDef[];
   headers: HeaderRow[];
@@ -60,6 +62,7 @@ function ProviderFormBody({
   submitLabel: string;
   submitDisabled: boolean;
 }) {
+  const apiId = useId();
   // 同时填了 API Key 与鉴权类 header（authorization / cf-aig-authorization）时提示：
   // pi-ai 会优先用 API Key（getClientApiKey），此时 header 不生效
   const authConflict = fields.apiKey.trim() !== '' &&
@@ -79,6 +82,25 @@ function ProviderFormBody({
         />
       </div>
 
+      <fieldset className="flex flex-col gap-2">
+        <legend id={apiId} className="text-xs font-medium">{t('provider.form.apiType')}</legend>
+        <RadioGroup
+          value={fields.api}
+          onValueChange={value => onFieldChange({ api: value === 'openai-responses' ? value : 'openai-completions' })}
+          aria-labelledby={apiId}
+          className="flex flex-wrap gap-4"
+        >
+          <div className="flex items-center gap-2">
+            <RadioGroupItem value="openai-completions" id={`${apiId}-completions`} />
+            <Label htmlFor={`${apiId}-completions`} className="text-xs">{t('provider.form.chatCompletions')}</Label>
+          </div>
+          <div className="flex items-center gap-2">
+            <RadioGroupItem value="openai-responses" id={`${apiId}-responses`} />
+            <Label htmlFor={`${apiId}-responses`} className="text-xs">{t('provider.form.responses')}</Label>
+          </div>
+        </RadioGroup>
+      </fieldset>
+
       <div className="space-y-2">
         <Label className="text-xs">{t('provider.form.baseUrl')}</Label>
         <Input
@@ -87,6 +109,7 @@ function ProviderFormBody({
           placeholder={t('provider.form.baseUrlPlaceholder')}
           className="h-8 text-sm"
         />
+        <p className="text-xs text-muted-foreground">{t('provider.form.baseUrlHint')}</p>
       </div>
 
       <div className="space-y-2">
@@ -159,9 +182,10 @@ function ProviderFormBody({
 
 // ─── Shared form logic hook ───
 
-function useProviderForm(initial?: { name: string; baseUrl: string; apiKey: string; models: CustomModelDef[]; headers?: Record<string, string> }) {
+function useProviderForm(initial?: { name: string; baseUrl: string; api?: CustomProviderConfig['api']; apiKey: string; models: CustomModelDef[]; headers?: Record<string, string> }) {
   const [name, setName] = useState(initial?.name ?? '');
   const [baseUrl, setBaseUrl] = useState(initial?.baseUrl ?? '');
+  const [api, setApi] = useState<ProviderFormFields['api']>(initial?.api ?? 'openai-completions');
   const [apiKey, setApiKey] = useState(initial?.apiKey ?? '');
   const [models, setModels] = useState<CustomModelDef[]>(initial?.models ?? []);
   const [headers, setHeaders] = useState<HeaderRow[]>(recordToHeaderRows(initial?.headers));
@@ -177,12 +201,13 @@ function useProviderForm(initial?: { name: string; baseUrl: string; apiKey: stri
     setFetching(false);
   };
 
-  const fields: ProviderFormFields = { name, baseUrl, apiKey, models, headers, manualModelId, fetching, fetchError, pickerRemoteIds };
+  const fields: ProviderFormFields = { name, baseUrl, api, apiKey, models, headers, manualModelId, fetching, fetchError, pickerRemoteIds };
 
   const onFieldChange = (patch: Partial<ProviderFormFields>) => {
     if (patch.baseUrl !== undefined || patch.apiKey !== undefined || patch.headers !== undefined) invalidateFetch();
     if (patch.name !== undefined) setName(patch.name);
     if (patch.baseUrl !== undefined) setBaseUrl(patch.baseUrl);
+    if (patch.api !== undefined) setApi(patch.api);
     if (patch.apiKey !== undefined) setApiKey(patch.apiKey);
     if (patch.models !== undefined) setModels(patch.models);
     if (patch.headers !== undefined) setHeaders(patch.headers);
@@ -245,6 +270,7 @@ function useProviderForm(initial?: { name: string; baseUrl: string; apiKey: stri
   const reset = () => {
     setName('');
     setBaseUrl('');
+    setApi('openai-completions');
     setApiKey('');
     setModels([]);
     setHeaders([]);
@@ -273,7 +299,7 @@ export function CustomProviderForm({ onAdd }: CustomProviderFormProps) {
   };
 
   const handleSubmit = () => {
-    const { name, baseUrl, apiKey, models, headers } = form.fields;
+    const { name, baseUrl, api, apiKey, models, headers } = form.fields;
     if (!name.trim() || !baseUrl.trim() || models.length === 0) return;
 
     // id 仅作内部存储 key（custom:<id>），不展示，用 uuid 保证唯一，
@@ -285,6 +311,7 @@ export function CustomProviderForm({ onAdd }: CustomProviderFormProps) {
       id,
       name: name.trim(),
       baseUrl: baseUrl.trim().replace(/\/+$/, ''),
+      api,
       models,
       ...(headerRecord ? { headers: headerRecord } : {}),
     }, apiKey.trim() || undefined);
@@ -341,6 +368,7 @@ export function CustomProviderCard({ config, apiKey, onUpdate, onRemove }: Custo
   const form = useProviderForm({
     name: config.name,
     baseUrl: config.baseUrl,
+    api: config.api,
     apiKey,
     models: config.models,
     headers: config.headers,
@@ -351,6 +379,7 @@ export function CustomProviderCard({ config, apiKey, onUpdate, onRemove }: Custo
     form.onFieldChange({
       name: config.name,
       baseUrl: config.baseUrl,
+      api: config.api ?? 'openai-completions',
       apiKey,
       models: config.models,
       headers: recordToHeaderRows(config.headers),
@@ -365,7 +394,7 @@ export function CustomProviderCard({ config, apiKey, onUpdate, onRemove }: Custo
   };
 
   const handleSave = () => {
-    const { name: newName, baseUrl, apiKey: newKey, models, headers } = form.fields;
+    const { name: newName, baseUrl, api, apiKey: newKey, models, headers } = form.fields;
     if (!newName.trim() || !baseUrl.trim() || models.length === 0) return;
 
     // Only pass apiKey if it was changed
@@ -375,6 +404,7 @@ export function CustomProviderCard({ config, apiKey, onUpdate, onRemove }: Custo
       ...config,
       name: newName.trim(),
       baseUrl: baseUrl.trim().replace(/\/+$/, ''),
+      api,
       models,
       headers: headerRowsToRecord(headers),
     }, keyChanged ? (newKey.trim() || undefined) : apiKey || undefined);

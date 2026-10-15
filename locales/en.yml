@@ -871,8 +871,12 @@ provider:
   form:
     name: "Name"
     namePlaceholder: "e.g. My Ollama"
+    apiType: "API type"
+    chatCompletions: "Chat Completions"
+    responses: "Responses"
     baseUrl: "Base URL"
     baseUrlPlaceholder: "e.g. http://localhost:11434/v1"
+    baseUrlHint: "Enter the base URL, usually ending in /v1, without /chat/completions or /responses."
     apiKeyOptional: "API Key (optional)"
     apiKeyPlaceholder: "Leave empty to skip auth"
     models: "Models"
