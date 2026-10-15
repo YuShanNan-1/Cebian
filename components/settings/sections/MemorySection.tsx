@@ -21,7 +21,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { SettingsOutletContext } from '@/components/settings/SettingsLayout';
-import { t } from '@/lib/i18n';
+import { getUiLanguage, t } from '@/lib/i18n';
 
 const MEMORY_TEMPLATE = () => `---
 name: new-memory
@@ -68,7 +68,7 @@ function OrganizeControls({
             <span className="text-sm font-medium">{t('settings.memory.organize.title')}</span>
             {state.lastRunAt && (
               <span className="text-xs text-muted-foreground">
-                {t('settings.memory.organize.lastRun', [new Date(state.lastRunAt).toLocaleString()])}
+                {t('settings.memory.organize.lastRun', [new Date(state.lastRunAt).toLocaleString(getUiLanguage())])}
               </span>
             )}
           </div>

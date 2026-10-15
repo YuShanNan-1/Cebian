@@ -7,16 +7,16 @@
  * 单一 Dexie 访问点）一次批量取一屏 UUID 的标签，DirView 保持纯展示。
  */
 import { getSessionLabels, type SessionLabelRow } from '@/lib/persistence/db';
-import { t } from '@/lib/i18n';
+import { getUiLanguage, t } from '@/lib/i18n';
 
 /** UUID 前 8 位短码，孤儿目录（会话已删）回落显示用。 */
 function shortId(uuid: string): string {
   return uuid.slice(0, 8);
 }
 
-/** 时间戳格式化为本地短日期（跟随浏览器 locale）。 */
+/** 时间戳格式化为短日期（跟随生效界面语言）。 */
 function formatDate(ts: number): string {
-  return new Date(ts).toLocaleDateString();
+  return new Date(ts).toLocaleDateString(getUiLanguage());
 }
 
 /** 一次批量解析多个工作区 UUID 的标签行，返回 `uuid → 标签行` 映射；查不到的 UUID

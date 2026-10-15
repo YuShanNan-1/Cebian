@@ -5,6 +5,7 @@ import { buildCrumbs, type Crumb, type CrumbSegment } from '@/entrypoints/vfs/li
 // Mock 成「回显 key（+ 拼接占位参数）」——测的是段的结构，不耦合具体译文。
 vi.mock('@/lib/i18n', () => ({
   t: (key: string, subs?: unknown[]) => (subs && subs.length ? `${key}|${subs.join(',')}` : key),
+  getUiLanguage: () => 'en',
 }));
 
 const UUID = '3f2a9c1e-7b4d-4e8a-9f0c-1a2b3c4d5e6f';

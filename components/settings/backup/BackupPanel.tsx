@@ -25,7 +25,7 @@ import { useStorageItem } from '@/hooks/useStorageItem';
 import { webdavConfig, type WebDavConfig } from '@/lib/persistence/storage';
 import { downloadFile } from '@/lib/utils';
 import { showConfirm } from '@/lib/ui/dialog';
-import { t } from '@/lib/i18n';
+import { getUiLanguage, t } from '@/lib/i18n';
 import type {
   BackupCategory,
   BackupManifest,
@@ -470,7 +470,7 @@ export function BackupPanel() {
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm">{s.name}</p>
                       <p className="text-xs text-muted-foreground">
-                        {s.lastModified ? new Date(s.lastModified).toLocaleString() : '—'}
+                        {s.lastModified ? new Date(s.lastModified).toLocaleString(getUiLanguage()) : '—'}
                         {formatSnapshotSize(s.size) ? ` · ${formatSnapshotSize(s.size)}` : ''}
                       </p>
                     </div>

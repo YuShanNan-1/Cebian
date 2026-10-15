@@ -13,6 +13,7 @@
 // handler，漏注册则 CI 红。
 
 import { CLIENT_MESSAGE_TYPES, type ClientMessage } from '@/lib/ipc/protocol';
+import { initI18n } from '@/lib/i18n';
 import { getPortState, onPortConnect, post, setInstanceId } from './port-registry';
 
 /** 每个消息类型对应的处理函数。映射类型让各域注册时天然拿到窄化后的 msg 形状。 */
@@ -74,8 +75,11 @@ function setupClientRouter(): void {
 
   onPortConnect((port) => {
     port.onMessage.addListener(async (msg: ClientMessage) => {
+      // SW 冷启动时先等界面语言字典就位，handler 产出的文案（报错 / 新会话标题）才是
+      // 用户所选语言；已就绪时只多一个 microtask，且同一 promise 的回调按到达顺序恢复。
+      await initI18n();
       // 传输层守卫：端口已出表（断连竞态）的消息不处理，避免 handler 为死端口
-      // 建立业务状态（如 viewer 表项）造成泄漏。
+      // 建立业务状态（如 viewer 表项）造成泄漏。放在 await 之后，覆盖等待期间的断连。
       if (!getPortState(port)) return;
       const handler = handlers[msg.type];
       if (!handler) return;

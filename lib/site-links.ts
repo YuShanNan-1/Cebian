@@ -1,17 +1,17 @@
 /**
  * site-links — 构造 cebian.catcat.work 上各页面的链接。
  *
- * 纯工具，只依赖 `chrome.i18n`，可从任意上下文（背景 SW / 侧边栏 / 设置页）导入。
- * 站点语言码为 `zh` / `zh-TW` / `en`（见 site/locales.config.mjs），这里把
- * `chrome.i18n.getUILanguage()` 返回的 BCP-47 码（如 `zh-CN` / `zh-TW` / `en-US`）
- * 映射到这三种之一。
+ * 可从任意上下文（背景 SW / 侧边栏 / 设置页）导入。站点语言码为 `zh` / `zh-TW` / `en`
+ * （见 site/locales.config.mjs），这里把生效界面语言（`getUiLanguage()`，用户手动选择或
+ * 浏览器语言，BCP-47 码如 `zh-CN` / `zh-TW` / `en-US`）映射到这三种之一。
  */
+import { getUiLanguage } from '@/lib/i18n';
 
 const SITE_ORIGIN = 'https://cebian.catcat.work';
 
 /** 把 UI 语言映射到站点的文档语言码：繁中 → `zh-TW`，其余中文 → `zh`，非中文 → `en`。 */
 function resolveDocsLang(): 'zh' | 'zh-TW' | 'en' {
-  const subtags = chrome.i18n.getUILanguage().toLowerCase().split('-');
+  const subtags = getUiLanguage().toLowerCase().split('-');
   if (subtags[0] !== 'zh') return 'en';
   // 繁体（Hant）及港澳台变体走 zh-TW，其余简体及通用中文走 zh。
   const hant = ['hant', 'tw', 'hk', 'mo'];

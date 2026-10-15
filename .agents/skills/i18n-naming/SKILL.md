@@ -23,9 +23,10 @@ Cebian ships **three independently maintained** locales:
 
 - `en` — default (fallback for all non-Chinese users)
 - `zh_CN` — Simplified Chinese (Mainland conventions)
-- `zh_TW` — Traditional Chinese (Taiwan conventions; also serves HK users
-  via Chrome's `zh_TW → zh → default` fallback chain when no `zh_HK` is
-  present — we do not ship a separate `zh_HK`)
+- `zh_TW` — Traditional Chinese (Taiwan conventions). We do not ship a
+  separate `zh_HK`; which bundle a zh-HK browser gets is up to the browser's
+  own fallback rules and is not guaranteed to be `zh_TW`. Hong Kong / Macau
+  users can pick 繁體中文 explicitly in Settings → Appearance → Language.
 
 Source files live at:
 
@@ -200,6 +201,28 @@ manifest: {
 The allow-list of flat top-level keys is fixed:
 `extName`, `extDescription`, `actionTitle`. Adding a new flat key
 requires updating this skill.
+
+## Runtime language switching
+
+Users can override the browser language in Settings → Appearance (issue #50).
+`t` from `@/lib/i18n` then reads `_locales/<locale>/messages.json` as an
+override dictionary instead of `chrome.i18n.getMessage`. Consequences for
+locale authors:
+
+- **`$` usage is limited** to single-digit `$1`–`$9` and a standalone `$$`.
+  The runtime formatter (`lib/i18n/format.ts`) reproduces only these, and
+  Chrome-style `placeholders` blocks are not supported. `scripts/lint-i18n.mjs`
+  enforces this.
+- **`common.languageTag`** is metadata, not display text: each file declares
+  its own BCP-47 tag (`en` / `zh-CN` / `zh-TW`). The runtime reads it to set
+  `<html lang>` to the language actually rendered. Never translate it.
+- **Language names** under `settings.appearance.language.{en,zhCN,zhTW}` are
+  endonyms and stay identical in every locale file.
+- **Adding a locale** also means adding it to `UI_LOCALES` / `LANGUAGE_TAGS`
+  in `lib/i18n/locales.ts` (a test checks `UI_LOCALES` against
+  `locales/*.yml`) and to `LANGUAGE_LABELS` in
+  `components/settings/sections/AppearanceSection.tsx`, plus its own
+  `common.languageTag` and endonym key.
 
 ## Glossary (canonical translations)
 

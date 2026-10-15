@@ -152,7 +152,7 @@ Voice input is handy for quickly jotting down a longer thought, such as:
 
 - **Local-first, with cloud fallback**: recognition runs on-device when the local engine and language are available. If local recognition is unsupported, the language is unavailable, or the language-pack download fails, Cebian automatically uses the browser's cloud recognition. That path may send audio to the browser's speech service and requires a network connection; it is separate from your configured chat model.
 - **Language packs**: when a local pack can be downloaded but is not ready, the button shows a preparing indicator and is temporarily disabled. Dictation starts automatically after the download completes.
-- **Language selection**: follows the browser's interface language. Simplified Chinese uses a Simplified Mandarin pack; Taiwan, Hong Kong, or Traditional Chinese uses a Traditional Mandarin pack. Other interface languages use US English. There is no separate speech-language selector.
+- **Language selection**: follows Cebian's interface language (Settings → Appearance → Language, which follows the browser by default). Simplified Chinese uses a Simplified Mandarin pack; Taiwan, Hong Kong, or Traditional Chinese uses a Traditional Mandarin pack. Other interface languages use US English. There is no separate speech-language selector.
 
 > The microphone appears only when the browser provides a speech-recognition API. It is hidden in environments such as Firefox without that API. The interface currently has no local-only switch; use keyboard input if you do not accept cloud fallback.
 

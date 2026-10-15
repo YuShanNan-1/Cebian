@@ -3,11 +3,15 @@
 
 import ReactDOM from 'react-dom/client';
 import { PageActionsApp } from './App';
+import { initI18n } from '@/lib/i18n';
 
 export default defineContentScript({
   matches: ['<all_urls>'],
   runAt: 'document_idle',
   async main(ctx) {
+    // 先装好界面语言字典再挂载（永不 reject，失败时按浏览器语言照常挂载）。语言在加载时固定，
+    // 别处切换后本页刷新才生效——不在宿主页里 remount 悬浮球 / 结果卡。
+    await initI18n();
     const ui = await createShadowRootUi(ctx, {
       name: 'cebian-page-actions',
       position: 'inline',

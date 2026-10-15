@@ -79,7 +79,7 @@ Names carry the design. Get them right the first time — the user reviews names
 `lib/` is organized **by concept, not by execution context**. A concept that spans both background and UI (connected by IPC) stays *whole* in one folder — never split a concept into `background/` vs `ui/` folders. The execution context shows up in the **file name**, not the folder. Decide placement with this tree:
 
 1. **Used by exactly one entrypoint and not reusable?** → it belongs in that `entrypoints/<ctx>/`, **not** in `lib/`. `lib/` is only for code shared across contexts, or pure utilities.
-2. **Pure utility — no Cebian domain, no platform binding, importable from anywhere (bg/UI/content/sandbox)?** → `lib/` root (this is why only `utils.ts` and `i18n.ts` live at the root).
+2. **Pure utility — no Cebian domain, no platform binding, importable from anywhere (bg/UI/content/sandbox)?** → `lib/` root (this is why `utils.ts` lives at the root).
 3. **Belongs to an existing concept?** → put it in that concept folder; encode the execution context in the filename:
    - bare name / `types.ts` / `client.ts` = shared across contexts
    - `*-channel.ts` = UX-side IPC entry (only UI imports it)
@@ -98,6 +98,7 @@ The current concept/capability folders and their boundaries:
 | `browser/` | chrome / CDP / page injection (tab-actions, mobile-emulation, element-picker) | content scripts must NOT import |
 | `ui/` | needs `document` / React / toast (dialog, clipboard) | background must NOT import |
 | `content/` | file-format helpers (mime, frontmatter, pdf-loader) | pure |
+| `i18n/` | 界面语言：`t`、语言偏好运行时与覆盖字典（`index.ts`），纯格式化 / 语言清单（`format.ts` / `locales.ts`）；扩展页、内容脚本、background 共用 | sandbox / offscreen 不得导入 `@/lib/i18n`（index 依赖 chrome.storage / chrome.i18n / fetch）；`format.ts` / `locales.ts` 为纯模块 |
 | `page-actions/` | 悬浮球 / 划词工具条的动作配置与消息契约（内容脚本 + 侧边栏 + background 共用） | — |
 | `search/` | 联网搜索引擎配置与抽取契约（`web_search` 工具与设置页共用；默认引擎脚本随概念走） | — |
 | `ai-config/` `backup/` `mcp/` `recorder/` `tools/` | established domains | — |

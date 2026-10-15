@@ -13,6 +13,7 @@ import type { Api, Model, UserMessage, AssistantMessage } from '@earendil-works/
 import { resolveModel } from '@/lib/providers/resolve-model';
 import { languageName } from '@/lib/utils';
 import { defaultSessionTitle } from '@/lib/agent/session-title';
+import { getUiLanguage, initI18n } from '@/lib/i18n';
 import {
   providerCredentials,
   customProviders,
@@ -46,11 +47,12 @@ import { runTransform } from './transform';
  * 且 "Reply in Chinese" 比 "Reply in zh-CN" 对模型稳当。
  */
 function envVars(request: PageActionRequest): Record<string, string> {
+  const uiLanguage = getUiLanguage();
   return stringParams({
     ...request.params,
     selected_text: request.text,
-    date: new Date().toLocaleDateString(),
-    ui_language: languageName(chrome.i18n.getUILanguage()),
+    date: new Date().toLocaleDateString(uiLanguage),
+    ui_language: languageName(uiLanguage),
   });
 }
 
@@ -93,6 +95,8 @@ export async function runPageActionStream(
   request: PageActionRequest,
   handlers: { onDelta: (delta: string) => void; signal: AbortSignal },
 ): Promise<PageActionOutcome> {
+  // SW 冷启动时先等界面语言字典就位：内置动作的提示词 / 标签都来自 t()
+  await initI18n();
   const action = await loadAction(request.actionId);
   const settings = resolvePageInteractionSettings(await pageInteractionSettings.getValue());
   // 环境变量一次动作只取一份快照：提示词渲染与后处理脚本共用它，免得两处各算一次
@@ -164,6 +168,8 @@ export async function materializeHandoff(
   },
   windowId: number,
 ): Promise<void> {
+  // 同上：落库的会话标题 / 提示词要用用户所选语言
+  await initI18n();
   await loadAction(req.actionId);
   const settings = resolvePageInteractionSettings(await pageInteractionSettings.getValue());
 

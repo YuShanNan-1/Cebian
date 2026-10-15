@@ -19,9 +19,16 @@ import { isInjectablePage } from '@/lib/browser/tab-actions';
 import { setupUpdateNotice } from './lifecycle/update-notice';
 import { setupPortRegistry } from './ipc/port-registry';
 import { setupClientRouter } from './ipc/client-router';
+import { followLanguagePreference, initI18n } from '@/lib/i18n';
 
 export default defineBackground(() => {
   console.log('Cebian background started', { id: browser.runtime.id });
+
+  // 界面语言字典异步加载、不 await：MV3 的事件监听必须在首个 tick 同步注册，否则 SW 被事件
+  // 唤醒时会丢事件。产出文案的入口（client-router / 划词 runner）各自 await 同一个 promise。
+  // background 没有 UI 状态可丢，持续跟随偏好变化（扩展页 / 内容脚本则固定在加载时的语言）。
+  followLanguagePreference();
+  void initI18n();
 
   chrome.sidePanel
     .setPanelBehavior({ openPanelOnActionClick: true })

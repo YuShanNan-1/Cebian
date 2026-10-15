@@ -21,6 +21,8 @@ vi.mock('@earendil-works/pi-ai/compat', () => ({ stream: mocks.stream }));
 vi.mock('@/lib/i18n', () => ({
   t: (key: string, substitutions?: string[]) =>
     substitutions ? `${key}:${substitutions.join('|')}` : key,
+  initI18n: async () => {},
+  getUiLanguage: () => 'en-US',
 }));
 
 vi.mock('@/lib/providers/resolve-model', () => ({
@@ -70,7 +72,6 @@ describe('page-action runner prompt contract', () => {
   beforeEach(() => {
     fakeBrowser.reset();
     vi.clearAllMocks();
-    vi.spyOn(chrome.i18n, 'getUILanguage').mockReturnValue('en-US');
     mocks.getProviderCredentials.mockResolvedValue({});
     mocks.getCustomProviders.mockResolvedValue([]);
     mocks.getLastSelectedModel.mockResolvedValue(IDENTITY);

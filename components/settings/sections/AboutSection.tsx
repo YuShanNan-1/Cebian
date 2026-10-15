@@ -45,8 +45,6 @@ const SOCIAL_LINKS: SocialLink[] = [
   },
 ];
 
-const INSTALL_GUIDE_URL = getInstallGuideUrl();
-
 export function AboutSection() {
   const { status, current, recheck } = useUpdateCheck();
 
@@ -212,7 +210,7 @@ function UpdateCheckRow({ status, onRecheck }: UpdateCheckRowProps) {
         >
           <p className="text-xs">{t('settings.about.updateAvailable', [status.latest])}</p>
           <Button asChild size="sm">
-            <a href={INSTALL_GUIDE_URL} target="_blank" rel="noreferrer noopener">
+            <a href={getInstallGuideUrl()} target="_blank" rel="noreferrer noopener">
               {t('settings.about.viewInstallGuide')}
             </a>
           </Button>

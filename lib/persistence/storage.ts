@@ -8,6 +8,7 @@ import { resolvePageScope, type PageScope } from '@/lib/page-actions/match';
 import type { SearchEnginesConfig } from '@/lib/search/types';
 import { DEFAULT_RECORDER_OPTIONS } from '@/lib/recorder/constants';
 import type { RecorderOptions } from '@/lib/recorder/types';
+import type { LanguagePreference } from '@/lib/i18n/locales';
 
 // ─── Provider credential types ───
 
@@ -309,6 +310,12 @@ export type ThemePreference = 'dark' | 'light' | 'system';
 
 export const themePreference = storage.defineItem<ThemePreference>(
   'local:theme',
+  { fallback: 'system' },
+);
+
+/** 界面语言偏好：`system` = 跟随浏览器。语言清单归属 i18n 概念（lib/i18n/locales）。 */
+export const languagePreference = storage.defineItem<LanguagePreference>(
+  'local:language',
   { fallback: 'system' },
 );
 

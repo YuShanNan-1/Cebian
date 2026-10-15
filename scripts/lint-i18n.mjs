@@ -2,18 +2,21 @@
 /**
  * lint-i18n.mjs — i18n regression guard.
  *
- * Three checks (any failure exits non-zero so the pre-commit hook blocks):
+ * Four checks (any failure exits non-zero so the pre-commit hook blocks):
  *  1. Asserts the top-level keys in `locales/en.yml`, `locales/zh_CN.yml`,
  *     and `locales/zh_TW.yml` match the approved allow-list (the manifest
  *     exception + namespace namespaces). Catches accidental flat keys
  *     like top-level `cancel: ...`.
- *  2. Asserts full key parity (flat paths) across all three locale files.
- *  3. Scans Cebian source for hard-coded Chinese characters in user-facing
+ *  1b. Asserts full key parity (flat paths) across all three locale files.
+ *  1c. Limits `$` in message values to `$1`–`$9` / `$$` (what the runtime
+ *     override formatter in lib/i18n/format.ts supports).
+ *  2. Scans Cebian source for hard-coded Chinese characters in user-facing
  *     positions (JSX text, string literals in components/entrypoints).
  */
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parseMessagesFile } from '@wxt-dev/i18n/build';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -123,6 +126,35 @@ async function flatKeyPaths(yamlPath) {
   return paths;
 }
 
+/**
+ * 运行时覆盖字典（lib/i18n/format.ts）按 Chromium 语义处理 `$`，但 `$x` / `$10` / `$$$` 等写法
+ * 两家浏览器有分歧或易误读，只放行单数字 `$1`–`$9` 与独立的 `$$` 两种 `$` 语义，
+ * 不支持 chrome.i18n 的 `$name$` placeholders。这里锁住该前提：文案里出现其他 `$`
+ * 用法、或出现 placeholders 时报错，避免手动选择语言后与原生路径输出不一致。
+ * 用构建本身的解析器（`@wxt-dev/i18n/build`）读 yml，多行值 / 复数也能如实覆盖。
+ */
+async function checkDollarUsage() {
+  const violations = [];
+  for (const file of ['locales/en.yml', 'locales/zh_CN.yml', 'locales/zh_TW.yml']) {
+    const messages = await parseMessagesFile(path.join(ROOT, file));
+    for (const msg of messages) {
+      // chrome 预定义消息（@@ui_locale 等）由浏览器提供，不进 messages.json
+      if (msg.key[0].startsWith('@@')) continue;
+      const key = msg.key.join('.');
+      if (msg.type === 'chrome' && msg.placeholders) {
+        violations.push({ file, key, reason: 'placeholders are not supported' });
+        continue;
+      }
+      const text = msg.type === 'plural' ? Object.values(msg.plurals).join(' | ') : msg.message;
+      // 只放行单个数字的 `$1`–`$9`，以及不再紧跟 `$` / 数字的 `$$`
+      if (text.replace(/\$\$(?![$0-9])|\$[1-9](?![0-9])/g, '').includes('$')) {
+        violations.push({ file, key, reason: 'only $1–$9 (single digit) and a standalone $$ are allowed' });
+      }
+    }
+  }
+  return violations;
+}
+
 async function checkLocaleAllowList() {
   const violations = [];
   for (const file of ['locales/en.yml', 'locales/zh_CN.yml', 'locales/zh_TW.yml']) {
@@ -192,6 +224,19 @@ async function main() {
     console.log('');
   } else if (readErrors.length === 0) {
     console.log('✓ i18n lint: all keys are in parity across en/zh_CN/zh_TW.');
+  }
+
+  // ─── 1c. `$` usage limited to what the runtime formatter supports ───
+  const dollarViolations = await checkDollarUsage();
+  if (dollarViolations.length > 0) {
+    hasFailure = true;
+    console.log(`✗ i18n lint: ${dollarViolations.length} unsupported \`$\` usage(s):`);
+    for (const { file, key, reason } of dollarViolations) {
+      console.log(`  ${file}: \`${key}\` — ${reason}`);
+    }
+    console.log('');
+  } else {
+    console.log('✓ i18n lint: locale `$` usage is limited to $1–$9 / $$.');
   }
 
   // ─── 2. Source scan for hard-coded Chinese ───

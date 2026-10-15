@@ -6,6 +6,7 @@
  * 不同上下文有不同取值路径，故按上下文各写一个取值器，引擎保持纯净。
  */
 
+import { getUiLanguage } from '@/lib/i18n';
 import { readText } from '@/lib/ui/clipboard';
 import { languageName } from '@/lib/utils';
 import type { TemplateVarName } from './template';
@@ -31,9 +32,10 @@ function emptyVars(): Record<TemplateVarName, string> {
 async function gatherTemplateVars(): Promise<Record<string, string>> {
   const vars = emptyVars();
 
-  vars.date = new Date().toLocaleDateString();
+  const uiLanguage = getUiLanguage();
+  vars.date = new Date().toLocaleDateString(uiLanguage);
   // 与内置划词动作一致给英文语言名，而不是 BCP-47 代码（见 languageName 注释）。
-  vars.ui_language = languageName(chrome.i18n.getUILanguage());
+  vars.ui_language = languageName(uiLanguage);
   // context（选区周边文本）只有划词场景采集，这里没有对应来源，保持空串。
 
   let tab: chrome.tabs.Tab | undefined;

@@ -8,6 +8,8 @@ actionTitle: "開啟 Cebian 側邊欄"
 
 # ─── 通用（UI 中複用）───
 common:
+  # 本檔案的 BCP-47 語言標籤（非顯示文案，不要翻譯）：執行時據此得知介面實際呈現的語言，用於 <html lang>。
+  languageTag: "zh-TW"
   newChat: "新對話"
   send: "傳送"
   history: "歷史記錄"
@@ -244,6 +246,14 @@ settings:
       followMain: "與對話模型相同"
   appearance:
     title: "外觀"
+    language:
+      label: "語言"
+      system: "跟隨瀏覽器"
+      # 語言自稱：三份 locale 檔案取值一致，不要翻譯
+      en: "English"
+      zhCN: "简体中文"
+      zhTW: "繁體中文"
+      hint: "其他已開啟的頁面需重新開啟或重新整理後生效。劃詞翻譯的預設目標語言與語音辨識也會跟隨此設定；擴充功能名稱等由瀏覽器顯示的內容仍跟隨瀏覽器語言。"
     theme:
       label: "主題"
       system: "跟隨系統"
@@ -1077,6 +1087,7 @@ errors:
   pageActionSaveFailed: "儲存失敗，請重試。"
   compactionSettingsSaveFailed: "儲存上下文壓縮設定失敗，請重試。"
   appearanceSaveFailed: "儲存外觀設定失敗，請重試。"
+  languageSwitchFailed: "切換語言失敗，請重試。"
   localFontsPermissionDenied: "讀取本機字型的權限被拒絕。請在 Chrome 設定裡允許 Cebian 使用本機字型，然後重試。"
   localFontsLoadFailed: "無法讀取本機字型，請重試。"
   openTabFailed: "無法開啟分頁，請重試。"

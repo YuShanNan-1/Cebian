@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { Routes, Route, Navigate, matchPath, useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -38,6 +38,13 @@ function applyTheme(resolved: 'dark' | 'light') {
   document.documentElement.setAttribute('data-theme', resolved);
 }
 
+/**
+ * 最近访问过的聊天路由，退出设置时回到这里；缺省 /chat/new 兜底首次进设置的情况。
+ * 放在模块级而非 useRef：在设置里切换界面语言会让 App 整体 remount（见 LocaleRoot），
+ * ref 会被重置成 /chat/new，「返回」就丢了原会话。
+ */
+let lastChatPath = '/chat/new';
+
 function App() {
   const [theme, setTheme] = useStorageItem(themePreference, 'system');
   const [themeReady, setThemeReady] = useState(false);
@@ -60,11 +67,9 @@ function App() {
   useSidePanelHandoff(goToSession);
 
   // 记住最近访问过的聊天路由（/chat/new 或 /chat/:sessionId），供退出设置时回到原处。
-  // 缺省 /chat/new 兜底首次进设置的情况。
-  const lastChatPathRef = useRef('/chat/new');
   useEffect(() => {
     if (location.pathname.startsWith('/chat/')) {
-      lastChatPathRef.current = location.pathname;
+      lastChatPath = location.pathname;
     }
   }, [location.pathname]);
 
@@ -141,7 +146,7 @@ function App() {
 
   // 退出设置：回到进设置前的聊天路由（记不到则 /chat/new 兜底）。
   const handleExitSettings = useCallback(() => {
-    navigate(lastChatPathRef.current, { replace: true });
+    navigate(lastChatPath, { replace: true });
   }, [navigate]);
 
   if (!themeReady || !appearance) return null;

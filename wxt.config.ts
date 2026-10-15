@@ -55,8 +55,10 @@ export default defineConfig({
     },
     // 内容脚本注入的悬浮球 <img> 由页面渲染进程加载扩展资源，必须显式声明为
     // web_accessible_resources，否则 Chrome 会拦截、图标渲染不出。
+    // `_locales/*/messages.json`：用户手动选择界面语言时，内容脚本要 fetch 对应字典
+    // （lib/i18n），非 WAR 资源同样会被拦截。内容是公开文案，图标已可被探测，不增加暴露面。
     web_accessible_resources: [
-      { resources: ['icon/128.png'], matches: ['<all_urls>'] },
+      { resources: ['icon/128.png', '_locales/*/messages.json'], matches: ['<all_urls>'] },
     ],
     // Override the MV3 sandbox-page CSP. Chrome's default is restrictive
     // (`script-src 'self' 'unsafe-inline' 'unsafe-eval'; child-src 'self'`),

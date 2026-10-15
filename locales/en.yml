@@ -9,6 +9,9 @@ actionTitle: "Open Cebian sidebar"
 
 # ─── Common (reused across the UI) ───
 common:
+  # This file's BCP-47 language tag (not display text, do not translate). The runtime reads it to know
+  # which language is actually rendered, for <html lang>.
+  languageTag: "en"
   newChat: "New chat"
   send: "Send"
   history: "History"
@@ -248,6 +251,14 @@ settings:
       followMain: "Same as conversation model"
   appearance:
     title: "Appearance"
+    language:
+      label: "Language"
+      system: "Follow browser"
+      # Language names in their own language; identical in every locale file (do not translate)
+      en: "English"
+      zhCN: "简体中文"
+      zhTW: "繁體中文"
+      hint: "Other open pages switch after you reopen or refresh them. The default target language of selection translation and the speech recognition language follow this setting too; the extension name and other text shown by the browser itself still follow the browser language."
     theme:
       label: "Theme"
       system: "System"
@@ -1091,6 +1102,7 @@ errors:
   pageActionSaveFailed: "Could not save the action."
   compactionSettingsSaveFailed: "Could not save the compaction settings. Try again."
   appearanceSaveFailed: "Could not save the appearance settings. Try again."
+  languageSwitchFailed: "Could not switch the language. Try again."
   localFontsPermissionDenied: "Access to installed fonts is blocked. Allow it for Cebian in Chrome settings, then try again."
   localFontsLoadFailed: "Couldn't read installed fonts. Try again."
   openTabFailed: "Couldn't open the tab. Try again."

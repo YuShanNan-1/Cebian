@@ -18,6 +18,7 @@ import {
   customProviders,
   userInstructions,
   themePreference,
+  languagePreference,
   lastSelectedThinkingLevel,
   mcpServers,
   providerCredentials,
@@ -300,6 +301,7 @@ export const BACKUP_REGISTRY: BackupEntry<any>[] = [
   }),
   entry({ item: userInstructions, storageClass: 'settings' }),
   entry({ item: themePreference, storageClass: 'settings' }),
+  entry({ item: languagePreference, storageClass: 'settings' }),
   entry({ item: lastSelectedThinkingLevel, storageClass: 'settings' }),
   // 录制选项。Firefox 上的网络录制还依赖可选权限，权限不随备份走：恢复后首次开始录制时会
   // 在点击里重新申请

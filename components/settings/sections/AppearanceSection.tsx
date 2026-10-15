@@ -19,15 +19,41 @@ import {
 } from '@/lib/persistence/storage';
 import { chatAppearanceStyle } from '@/lib/ui/chat-appearance';
 import { isLocalFontAccessSupported } from '@/lib/ui/local-fonts';
-import { t } from '@/lib/i18n';
+import { getActiveLanguagePreference, setLanguagePreference, t } from '@/lib/i18n';
+import { UI_LOCALES, toLanguageTag, type LanguagePreference } from '@/lib/i18n/locales';
 
-const THEME_OPTIONS: { value: ThemePreference; getLabel: () => string }[] = [
+/** 单选项：`lang` 只在选项文字与界面语言不同（如语言自称）时给出。 */
+interface RadioOption<T extends string> {
+  value: T;
+  getLabel: () => string;
+  lang?: string;
+}
+
+// 语言名用自称（English / 简体中文 / 繁體中文），三份 locale 文件取值一致；「跟随浏览器」才翻译。
+// Record 覆盖全部偏好值：新增语言忘了配标签会编译失败。
+const LANGUAGE_LABELS: Record<LanguagePreference, () => string> = {
+  system: () => t('settings.appearance.language.system'),
+  en: () => t('settings.appearance.language.en'),
+  zh_CN: () => t('settings.appearance.language.zhCN'),
+  zh_TW: () => t('settings.appearance.language.zhTW'),
+};
+
+// 语言自称带 lang：读屏按该语言的发音念「简体中文」「English」（WCAG 3.1.2）
+const LANGUAGE_OPTIONS: RadioOption<LanguagePreference>[] = (['system', ...UI_LOCALES] as const).map(
+  (value) => ({
+    value,
+    getLabel: LANGUAGE_LABELS[value],
+    lang: value === 'system' ? undefined : toLanguageTag(value),
+  }),
+);
+
+const THEME_OPTIONS: RadioOption<ThemePreference>[] = [
   { value: 'system', getLabel: () => t('settings.appearance.theme.system') },
   { value: 'light', getLabel: () => t('settings.appearance.theme.light') },
   { value: 'dark', getLabel: () => t('settings.appearance.theme.dark') },
 ];
 
-const FONT_OPTIONS: { value: ChatFontPreset; getLabel: () => string }[] = [
+const FONT_OPTIONS: RadioOption<ChatFontPreset>[] = [
   { value: 'default', getLabel: () => t('settings.appearance.font.default') },
   { value: 'serif', getLabel: () => t('settings.appearance.font.serif') },
   { value: 'mono', getLabel: () => t('settings.appearance.font.mono') },
@@ -135,18 +161,20 @@ function useEditableChatAppearance(): [ChatAppearance | null, (patch: Partial<Ch
   return [local, update];
 }
 
-/** 横排单选组：一行几个短选项（主题 / 字体预设）。 */
+/** 横排单选组：一行几个短选项（语言 / 主题 / 字体预设）。 */
 function InlineRadioGroup<T extends string>({
   value,
   options,
   onChange,
   labelId,
+  describedBy,
   disabled,
 }: {
   value: T;
-  options: { value: T; getLabel: () => string }[];
+  options: RadioOption<T>[];
   onChange: (value: T) => void;
   labelId: string;
+  describedBy?: string;
   disabled?: boolean;
 }) {
   const idPrefix = useId();
@@ -155,13 +183,14 @@ function InlineRadioGroup<T extends string>({
       value={value}
       onValueChange={(v) => onChange(v as T)}
       aria-labelledby={labelId}
+      aria-describedby={describedBy}
       disabled={disabled}
       className="flex flex-wrap gap-x-5 gap-y-2"
     >
       {options.map((o) => (
         <div key={o.value} className="flex items-center gap-2">
           <RadioGroupItem value={o.value} id={`${idPrefix}-${o.value}`} />
-          <Label htmlFor={`${idPrefix}-${o.value}`} className="text-sm font-normal">
+          <Label htmlFor={`${idPrefix}-${o.value}`} lang={o.lang} className="text-sm font-normal">
             {o.getLabel()}
           </Label>
         </div>
@@ -237,6 +266,10 @@ export function AppearanceSection() {
 
   const [scaleDraft, setScaleDraft] = useState<number | null>(null);
 
+  // 选中项取本页实际生效的偏好而非存储：别的窗口改了偏好时，本页仍显示自己正在用的语言
+  const [language, setLanguage] = useState<LanguagePreference>(getActiveLanguagePreference);
+  const languageLabelId = useId();
+  const languageHintId = useId();
   const themeLabelId = useId();
   const fontLabelId = useId();
   const fontHintId = useId();
@@ -249,6 +282,16 @@ export function AppearanceSection() {
     localFontsSupported || current.fontPreset === 'custom'
       ? FONT_OPTIONS
       : FONT_OPTIONS.filter((o) => o.value !== 'custom');
+
+  const writeLanguage = (next: LanguagePreference) => {
+    setLanguage(next);
+    // 成功时本页随即 remount（LocaleRoot），这里不再 setState；只有失败（本页未切换）才回到实际生效的偏好
+    setLanguagePreference(next).catch((err) => {
+      console.warn('[appearance] switch language failed:', err);
+      setLanguage(getActiveLanguagePreference());
+      toast.error(t('errors.languageSwitchFailed'));
+    });
+  };
 
   const writeTheme = (next: ThemePreference) => {
     void themePreference.setValue(next).catch((err) => {
@@ -266,6 +309,20 @@ export function AppearanceSection() {
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-6">
       <h2 className="text-base font-semibold">{t('settings.appearance.title')}</h2>
+
+      <div className="space-y-2">
+        <Label id={languageLabelId} className="text-sm">{t('settings.appearance.language.label')}</Label>
+        <InlineRadioGroup
+          value={language}
+          options={LANGUAGE_OPTIONS}
+          onChange={writeLanguage}
+          labelId={languageLabelId}
+          describedBy={languageHintId}
+        />
+        <p id={languageHintId} className="text-xs text-muted-foreground">
+          {t('settings.appearance.language.hint')}
+        </p>
+      </div>
 
       <div className="space-y-2">
         <Label id={themeLabelId} className="text-sm">{t('settings.appearance.theme.label')}</Label>

@@ -19,6 +19,8 @@
 // Web Speech API 的完整类型（含 on-device 静态方法与 `processLocally`）声明
 // 在 `lib/speech/speech-recognition.d.ts`，TypeScript lib.dom 未覆盖。
 
+import { getUiLanguage } from '@/lib/i18n';
+
 /** 识别模式选择（供上层决定走哪条路径，并预留给将来的用户开关）：
  *  - `auto`：本地优先、云端兜底（默认）。
  *  - `on-device`：强制本地，本地不可用即报错、不退云端。
@@ -72,7 +74,7 @@ function getRecognitionCtor(): SpeechRecognitionStatic | undefined {
   return window.SpeechRecognition ?? window.webkitSpeechRecognition;
 }
 
-/** 把浏览器 UI 语言（如 "zh-CN" / "en-US"）映射成 SODA 本地引擎认的
+/** 把界面语言（`getUiLanguage()` 的 BCP-47 标签，如 "zh-CN" / "en-US"）映射成 SODA 本地引擎认的
  *  BCP-47 完整标签。本地引擎按完整标签注册语言包，简写（"zh" / "cmn"）
  *  会匹配不到，必须用 `cmn-Hans-CN` / `cmn-Hant-TW` / `en-US` 这类全标签。 */
 function mapUiLangToRecognitionLang(uiLang: string): string {
@@ -123,9 +125,9 @@ export function isOnDeviceSupported(): boolean {
   return typeof Ctor?.available === 'function' && typeof Ctor?.install === 'function';
 }
 
-/** 当前应使用的识别语言（BCP-47 全标签）。默认取扩展 UI 语言，可显式覆盖。 */
+/** 当前应使用的识别语言（BCP-47 全标签）。默认取扩展的生效界面语言，可显式覆盖。 */
 export function resolveRecognitionLang(uiLang?: string): string {
-  const source = uiLang ?? chrome.i18n.getUILanguage?.() ?? 'en-US';
+  const source = uiLang ?? getUiLanguage();
   return mapUiLangToRecognitionLang(source);
 }
 
