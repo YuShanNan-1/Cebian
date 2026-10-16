@@ -37,6 +37,7 @@ export function toModel(config: CustomProviderConfig, model: CustomModelDef): Mo
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow: model.contextWindow ?? DEFAULT_CONTEXT_WINDOW,
     maxTokens: model.maxTokens ?? DEFAULT_MAX_TOKENS,
+    ...(model.reasoning ? { thinkingLevelMap: { xhigh: 'xhigh', max: 'max' } } : {}),
     // 自定义端点面向第三方 OpenAI 兼容 API，pi-ai 对未知 host 的默认值按 OpenAI 本家倾斜，
     // 这里逐项纠偏；getCompat 按字段覆盖，未列出的项不影响自动探测：
     // - supportsDeveloperRole: developer 角色只有 OpenAI 及其严格镜像认识（OpenAI 收到

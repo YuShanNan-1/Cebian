@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { Type } from 'typebox';
 import { applyFetchedSelection, supportsToolCalling, toModel } from '@/lib/providers/custom-models';
 import { getBuiltinModels } from '@earendil-works/pi-ai/providers/all';
+import { getSupportedThinkingLevels } from '@earendil-works/pi-ai';
 import { streamSimple } from '@earendil-works/pi-ai/compat';
 import { CHAT_PROVIDER_MAX_RETRIES, withProviderRetries } from '@/lib/agent/provider-retry';
 import type { CustomModelDef, CustomProviderConfig } from '@/lib/persistence/storage';
@@ -77,6 +78,13 @@ describe('toModel', () => {
       contextWindow: configured.contextWindow,
       maxTokens: configured.maxTokens,
     });
+  });
+
+  it('自定义推理模型提供完整七档思考强度', () => {
+    expect(getSupportedThinkingLevels(toModel(cfg, { ...m, reasoning: true }))).toEqual([
+      'off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max',
+    ]);
+    expect(getSupportedThinkingLevels(toModel(cfg, m))).toEqual(['off']);
   });
 
   it('Responses 保留自定义请求头与关闭工具调用的设置', () => {

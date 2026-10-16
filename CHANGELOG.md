@@ -18,6 +18,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 变更 / Changed
+
+- 优化自定义提供商设置页的接口类型选项间距，并让自定义推理模型显示 `xhigh` 与 `max` 思考强度。
+
+- Improve spacing between API type options in custom provider settings and show `xhigh` and `max` thinking levels for custom reasoning models.
+
 ## 1.8.1-beta.2 - 2026-10-16
 
 ### 新增 / Added

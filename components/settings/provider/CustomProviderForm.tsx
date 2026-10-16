@@ -82,7 +82,7 @@ function ProviderFormBody({
         />
       </div>
 
-      <fieldset className="flex flex-col gap-2">
+      <fieldset className="flex flex-col gap-3">
         <legend id={apiId} className="text-xs font-medium">{t('provider.form.apiType')}</legend>
         <RadioGroup
           value={fields.api}
