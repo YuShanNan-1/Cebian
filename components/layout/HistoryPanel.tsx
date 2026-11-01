@@ -189,7 +189,11 @@ export function HistoryPanel({ open, onClose, onSelectSession, onDeleteSession }
   const allSelectedArchived = hasSelection && selectedSessions.every((s) => s.archivedAt != null);
 
   return (
+    // 关闭时只是被 translate 到视口外，必须用 inert 摘出焦点链：否则 Tab 会聚焦到面板里的
+    // 按钮，浏览器为把它滚进视野去改外层 overflow-hidden 容器的 scrollLeft，页面卡在半截
+    // 且 historyOpen 状态不变、无法复位（#91）。
     <div
+      inert={!open}
       className={`absolute inset-0 bg-background z-50 flex flex-col transition-transform duration-300 ease-out ${
         open ? 'translate-x-0' : 'translate-x-full'
       }`}

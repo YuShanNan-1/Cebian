@@ -24,6 +24,62 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Improve spacing between API type options in custom provider settings and show `xhigh` and `max` thinking levels for custom reasoning models.
 
+### 新增 / Added
+
+- 任务运行中也能接着发消息，用法与 Codex 一致：按 Enter 排队，当前任务正常跑完后按顺序自动发出；按 Shift+⌘+Enter（Windows / Linux 上为 Shift+Ctrl+Enter）插话，在当前这一步结束后插入正在进行的任务。排队的消息显示在输入框上方，可以立即发送、编辑或删除。任务运行中输入框里有文字时，停止按钮会换成发送按钮，这时按 Esc 停止任务；任务出错或被停止时队列会保留并暂停，不会自动发出。Enter 默认排队还是插话，可以在设置 → 对话 →「任务运行中发送消息」里切换 ([#96](https://github.com/maotoumao/Cebian/issues/96))
+
+- You can keep sending messages while a task is running, the same way as in Codex: press Enter to queue a message, and queued messages are sent in order once the current task finishes normally; press Shift+⌘+Enter (Shift+Ctrl+Enter on Windows / Linux) to steer, inserting the message into the running task as soon as the current step finishes. Queued messages appear above the input box, where you can send one now, edit it or delete it. While a task is running and the input has text, the stop button turns into the send button and Esc stops the task; if the task fails or you stop it, the queue is kept and paused instead of sending on its own. Whether Enter queues or steers can be changed in Settings → Chat → "Sending while a task runs" ([#96](https://github.com/maotoumao/Cebian/issues/96))
+
+### 修复 / Fixed
+
+- 深色模式下，文件页「预览 / 源码」切换按钮看不清当前选中的是哪一个；鼠标悬停在另一个上时，看起来也像已经切换了过去
+
+- In dark mode, the "Preview / Source" toggle on the file page made it hard to tell which one was selected, and hovering over the other one looked as if it had been switched to
+
+## 1.8.2 - 2026-10-24
+
+### 新增 / Added
+
+- 设置 → 外观新增「语言」：可在跟随浏览器、English、简体中文、繁體中文之间切换界面语言，选择会被记住。在设置页切换后当前页面立即生效，其他已打开的页面重新打开或刷新后生效；划词翻译的默认目标语言、斜杠提示词里的 `{{ui_language}}`、日期格式与语音识别也随之切换。扩展名称等由浏览器自身显示的内容仍跟随浏览器语言 ([#50](https://github.com/maotoumao/Cebian/issues/50))
+- 新增模型：Claude Haiku 5.5（GitHub Copilot），Gemini 4 Argon（Google、GitHub Copilot、OpenRouter、Vercel AI Gateway），DeepSeek V4.1 Flash 1017（Fireworks、Hugging Face、OpenRouter、Vercel AI Gateway），MiniMax-M3.1-Flash（MiniMax、MiniMax (CN)、Vercel AI Gateway）；其余提供商的内置模型列表也同步到了最新
+
+- Settings → Appearance gains a "Language" option: switch the interface between Follow browser, English, 简体中文 and 繁體中文, and the choice is remembered. The settings page you change it in switches right away; other open pages switch after you reopen or refresh them. The default target language of selection translation, `{{ui_language}}` in slash prompts, date formats and speech recognition follow it too. The extension name and other text shown by the browser itself still follow the browser language ([#50](https://github.com/maotoumao/Cebian/issues/50))
+- Added models: Claude Haiku 5.5 (GitHub Copilot), Gemini 4 Argon (Google, GitHub Copilot, OpenRouter, Vercel AI Gateway), DeepSeek V4.1 Flash 1017 (Fireworks, Hugging Face, OpenRouter, Vercel AI Gateway) and MiniMax-M3.1-Flash (MiniMax, MiniMax (CN), Vercel AI Gateway); the built-in model lists of the other providers are refreshed too
+
+### 变更 / Changed
+
+- 部分模型的可选思考档随上游调整：例如 Anthropic 的 Claude Opus 5 与 Claude Haiku 5.5 可以选「关闭」，xAI 的 Grok 4.3 / 4.5 新增「极高」档，Xiaomi MiMo 的 MiMo-V2.6 系列只保留「关闭 / 高」两档，OpenRouter 上 OpenAI 的 o1 / o3 / o4-mini 系列与 Kimi Coding Plan 的 Kimi For Coding HighSpeed 不再提供「关闭」。之前选的档位不再可用时，会自动调整为该模型支持的档位（优先调到更高的最近一个可用档位，没有更高档时再往下调）
+- 部分模型的上下文窗口随上游更新：例如 OpenAI Codex 的 GPT-6.1 Sol 从 272K 增至 500K，Mistral 的 Mistral Large 4 从 512K 增至 1M，Anthropic 的 Claude Sonnet 4.5 从 1M 调整为 200K；上下文用量和自动压缩按新的窗口计算
+- 同一对话中途换模型后，之前模型的思考内容不再发给新模型。原先它会以普通文字发过去，新模型可能把它当成自己回复的一部分，把推理写进可见的回答里
+- Kimi Coding Plan 改用 Kimi Code 官方客户端所用的 OpenAI 兼容接口
+
+- Some models' thinking levels follow upstream changes: for example, Claude Opus 5 and Claude Haiku 5.5 on Anthropic can now be set to "Off", Grok 4.3 / 4.5 on xAI gain "Extra High", the MiMo-V2.6 models on Xiaomi MiMo now offer only "Off" / "High", and OpenAI's o1 / o3 / o4-mini models on OpenRouter and Kimi For Coding HighSpeed on the Kimi Coding Plan no longer offer "Off". A previously selected level that is no longer available is adjusted to one the model supports (the next level up first, or the next one down if there is none higher)
+- Some models' context windows follow upstream updates: for example, GPT-6.1 Sol on OpenAI Codex grows from 272K to 500K, Mistral Large 4 on Mistral from 512K to 1M, and Claude Sonnet 4.5 on Anthropic changes from 1M to 200K; context usage and auto-compaction follow the new windows
+- After you switch models in the middle of a chat, the previous model's thinking is no longer sent to the new model. It used to be sent as plain text, and the new model could take it as part of its own replies and write its reasoning into the visible answer
+- The Kimi Coding Plan now uses the OpenAI-compatible endpoint of the official Kimi Code client
+
+### 移除 / Removed
+
+- 内置模型列表移除了上游已下架的模型，例如 GitHub Copilot 的 GPT-5.5、GPT-5.4、GPT-5.4 mini、GPT-5 Mini、Claude Opus 4.7、Gemini 3.5 / 3.6 / 3.7 Flash、Kimi K2.7 Code 与 MAI-Code-1-Flash，OpenAI Codex 的 GPT-5.5 与 GPT-5.3 Codex Spark，OpenAI 的 GPT-5.2 Chat 与 GPT-5.3 Chat，Xiaomi MiMo 的 MiMo-V2.5 系列，Mistral 的 Mistral 7B 与 Mixtral 系列，NVIDIA NIM 的 Kimi K3 与 Nemotron 3 Super，以及 OpenRouter、Together AI、Vercel AI Gateway 上的一批模型。之前选用（或设为新对话默认）这些模型的对话，需要换一个模型才能继续
+
+- Models retired upstream are removed from the built-in lists — for example GPT-5.5, GPT-5.4, GPT-5.4 mini, GPT-5 Mini, Claude Opus 4.7, Gemini 3.5 / 3.6 / 3.7 Flash, Kimi K2.7 Code and MAI-Code-1-Flash under GitHub Copilot; GPT-5.5 and GPT-5.3 Codex Spark under OpenAI Codex; GPT-5.2 Chat and GPT-5.3 Chat under OpenAI; the MiMo-V2.5 models under Xiaomi MiMo; Mistral 7B and the Mixtral models under Mistral; Kimi K3 and Nemotron 3 Super under NVIDIA NIM; plus a number of models on OpenRouter, Together AI and Vercel AI Gateway. Chats that used one of these models (or had it as the default for new chats) need a different model to continue
+
+### 修复 / Fixed
+
+- 修复在侧边栏对话页按 Tab 时，界面可能偏移出半个历史记录页并卡住、只能重开侧边栏才能恢复的问题 ([#91](https://github.com/maotoumao/Cebian/issues/91))
+- 模型发出的工具调用参数无法解析为 JSON 时，不再带着解析出的残缺参数执行，而是作为一次失败的调用把原始参数返回给模型，让它重新调用
+- 工具参数的字符串里出现以 `\u` 开头、但不是合法转义的文本（如 LaTeX 的 `\usepackage`）时，不再丢失参数字段
+- 工具只返回空白内容时，走 OpenAI（含 OpenAI 兼容）或 Google 接口的模型不再报 400 错误
+- 经 LiteLLM 等 OpenAI 兼容代理接入的自定义提供商，思考内容不再显示在回答之后
+- Mistral 的模型长时间思考或长回复时，不再因请求超时在中途被中断
+
+- Fixed pressing Tab on the side panel chat page sometimes shifting half of the history page into view and getting stuck there until the side panel was reopened ([#91](https://github.com/maotoumao/Cebian/issues/91))
+- A tool call whose arguments can't be parsed as JSON no longer runs with the partially parsed arguments; it fails and the raw arguments go back to the model so it can call the tool again
+- Tool-call arguments no longer lose fields when a string contains text starting with `\u` that isn't a valid escape, such as LaTeX's `\usepackage`
+- Tools that return only whitespace no longer cause a 400 error on models served through OpenAI (including OpenAI-compatible) or Google APIs
+- Custom providers behind OpenAI-compatible proxies such as LiteLLM no longer show thinking after the answer
+- Mistral models are no longer cut off by the request timeout during long thinking or long replies
+
 ## 1.8.1-beta.2 - 2026-10-16
 
 ### 新增 / Added

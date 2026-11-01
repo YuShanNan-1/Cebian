@@ -145,8 +145,13 @@ message-helpers / tool-permissions —— 四个都确有 UI + background 双边
 > **现状（2026-10）**：pi 1.0.0 删除了整个实验性 harness（含 `AgentHarness` 与 Session 层），
 > 本节「迁移到 AgentHarness」的方向已不成立。Cebian 已升到 pi 1.0 的稳定 Agent 核心，
 > 会话树 / 压缩依赖的 harness 代码冻结 vendor 于 `lib/shims/pi-harness/`。上游的接替者是
-> `@earendil-works/pi-durable`（仍标 Experimental，API 全新，且无浏览器存储后端），等它
-> 稳定后再评估是否迁移。下文保留为历史记录。
+> `@earendil-works/pi-durable`（仍标 Experimental，API 全新），等它稳定后再评估是否迁移。
+> 2026-10-24 按 pi 1.4.0 复查：durable 已有 `IndexedDbStorage`，但它是连 Agent 循环一起
+> 替换的整套运行时，且不能删除单个会话（上游 #11026）、没有会话导出 / 导入 API、`Storage`
+> 接口几乎每个 minor 都有破坏性变更，IndexedDB 后端只在 fake-indexeddb 下测过、没有 schema
+> 升级路径。可以开始评估的信号：README 去掉 Experimental，durable / chord 连续数个 minor
+> 无 Breaking，IndexedDB 后端进 spec 并有迁移与真实浏览器测试，#11026 等关闭。
+> 下文保留为历史记录。
 >
 > **进展（2026-08）**：树化迁移已完成——存储层换成会话树（`DexieSessionStorage`
 > implements pi `SessionStorage` + `lib/shims/pi-harness/session/state.ts` 移植 reducer +

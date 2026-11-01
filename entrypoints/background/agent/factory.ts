@@ -195,6 +195,9 @@ function createCebianAgent(options: CreateAgentOptions): Agent {
       messages,
     },
 
+    // 运行中的插话（issue #96）在同一个工具边界一次全部投进去，而不是一个边界只投一条。
+    steeringMode: 'all',
+
     // 每次请求前（含每个 run 的首次）装上 system 头。返回的 context 会替换 loop 本次及
     // 之后请求所用的 context，所以 run 中途改写的 preamble 在下一个 turn 生效。
     prepareRequest: ({ context, model: requestModel }) => {
@@ -256,6 +259,11 @@ function createCebianAgent(options: CreateAgentOptions): Agent {
     // Dynamic API key resolution (handles OAuth token refresh)
     getApiKey: (provider: string): Promise<string | undefined> =>
       resolveProviderApiKey(provider),
+
+    // pi-agent-core 1.4 起 loop 默认带 pi 自己的归因（OpenRouter 的 `X-OpenRouter-Title: pi`、
+    // NVIDIA 的 `X-BILLING-INVOKE-ORIGIN: Pi` 等）。这里关掉，与压缩、划词这类直接调
+    // pi-ai 的请求保持一致；OpenRouter 的 Cebian 归因仍由 resolve-model 写进 model.headers。
+    identity: { attribution: null },
 
     // 工具执行前授权门禁（可选）。permissionRequest 自定义消息无需在
     // convertToLlm 里特判——上面的角色白名单已把它连同其它自定义类型一并过滤，

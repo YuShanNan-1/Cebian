@@ -4,7 +4,7 @@
 
 ## 为什么要 vendor
 
-pi 1.0.0 删除了整个实验性 harness（Session 层、压缩函数、`session/testing` 子路径、`compactionSummary` 等自定义消息类型），官方推荐的接替者 `@earendil-works/pi-durable` 仍标 Experimental，API 完全不同，也没有浏览器可用的存储后端。
+pi 1.0.0 删除了整个实验性 harness（Session 层、压缩函数、`session/testing` 子路径、`compactionSummary` 等自定义消息类型），官方推荐的接替者 `@earendil-works/pi-durable` 仍标 Experimental，API 完全不同，而且是连 Agent 循环一起替换的整套运行时；1.4.0 虽加了 `IndexedDbStorage`，但还不能删除单个会话，也没有会话导出 / 导入能力（评估结论见 TODO.md「迁移到 pi 的 `AgentHarness`」一节）。
 
 Cebian 的会话树存储（`lib/persistence/session-tree.ts`）和压缩摘要（`lib/agent/compaction.ts`）依赖这部分代码，所以把它冻结在 0.84.4 快照、自行维护；对 pi 只依赖 1.0 承诺稳定的 Agent 核心与 pi-ai。
 

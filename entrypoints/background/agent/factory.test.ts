@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
-import type { AgentEvent, AgentMessage, AgentTool } from '@earendil-works/pi-agent-core';
+import type { Agent, AgentEvent, AgentMessage, AgentTool } from '@earendil-works/pi-agent-core';
 import {
   createAssistantMessageEventStream,
   normalizeContext,
@@ -12,9 +12,11 @@ import {
   type TranscriptContext,
 } from '@earendil-works/pi-ai';
 import { streamSimple } from '@earendil-works/pi-ai/compat';
+import { getBuiltinModels, type BuiltinProvider } from '@earendil-works/pi-ai/providers/all';
 import { createCompactionSummaryMessage } from '@/lib/agent/compaction-summary';
 import { CHAT_PROVIDER_MAX_RETRIES } from '@/lib/agent/provider-retry';
 import { toModel } from '@/lib/providers/custom-models';
+import { resolveModel } from '@/lib/providers/resolve-model';
 import { createCebianAgent, type AgentPreamble } from './factory';
 import { NO_TOOLS_NOTE } from './system-prompt';
 
@@ -126,6 +128,28 @@ describe('createCebianAgent · 聊天重试接入', () => {
     expect(callbacks.onSettled).toHaveBeenCalledOnce();
   });
 });
+
+/** 经 pi-ai 真实的 streamSimple 发出一次请求：onPayload 抓请求体，fetch 处抓请求头后抛错保持离线。 */
+async function captureRequest(agent: Agent, text: string): Promise<{ payload: unknown; headers: Headers }> {
+  const payloads: unknown[] = [];
+  const headers: Headers[] = [];
+  agent.streamFunction = (m, context, options) =>
+    streamSimple(m, context, {
+      ...options,
+      apiKey: 'test-key',
+      onPayload: (payload) => {
+        payloads.push(payload);
+        return undefined;
+      },
+      fetch: async (_url, init) => {
+        headers.push(new Headers(init?.headers));
+        throw new Error('offline');
+      },
+    });
+  await agent.prompt(text);
+  expect(headers).toHaveLength(1);
+  return { payload: payloads[0], headers: headers[0] };
+}
 
 describe('createCebianAgent · system 头', () => {
   beforeEach(() => {
@@ -368,7 +392,6 @@ describe('createCebianAgent · 不支持工具调用的模型 (#83)', () => {
     expect(hasToolTraffic(requests[0])).toBe(false);
   });
 
-  // 经 pi-ai 真实的 streamSimple 转换，用 onPayload 抓实际请求体（fetch 抛错保持离线）
   const custom = toModel(
     { id: 'p', name: 'P', baseUrl: 'https://example.invalid/v1', models: [] },
     { modelId: 'chat-only', name: 'chat-only', reasoning: true, toolCalling: false },
@@ -378,21 +401,8 @@ describe('createCebianAgent · 不支持工具调用的模型 (#83)', () => {
   async function requestBody(history: AgentMessage[]): Promise<{ tools?: unknown; messages: { role: string }[] }> {
     const preamble: AgentPreamble = { systemPrompt: 'base', tools: [echoTool('echo')] };
     const agent = createCebianAgent({ model: custom, preamble, thinkingLevel: 'off', messages: history });
-    const payloads: { tools?: unknown; messages: { role: string }[] }[] = [];
-    agent.streamFunction = (m, context, options) =>
-      streamSimple(m, context, {
-        ...options,
-        apiKey: 'test-key',
-        onPayload: (payload) => {
-          payloads.push(payload as (typeof payloads)[number]);
-          return undefined;
-        },
-        fetch: async () => {
-          throw new Error('offline');
-        },
-      });
-    await agent.prompt('next');
-    return payloads[0];
+    const { payload } = await captureRequest(agent, 'next');
+    return payload as { tools?: unknown; messages: { role: string }[] };
   }
 
   function expectPlainAlternating(body: { tools?: unknown; messages: { role: string }[] }): void {
@@ -460,5 +470,33 @@ describe('createCebianAgent · 不支持工具调用的模型 (#83)', () => {
     expect(requests[1][0]).toMatchObject({ role: 'system', content: 'base' });
     expect(toolNames(requests[1][0])).toEqual(['echo']);
     expect(hasToolTraffic(requests[1])).toBe(true);
+  });
+});
+
+describe('createCebianAgent · 请求归因', () => {
+  beforeEach(() => {
+    fakeBrowser.reset();
+  });
+
+  // 模型经 resolveModel 解析，与运行时一致（OpenRouter 的 Cebian 归因头由它写进 model.headers）
+  async function requestHeaders(provider: string): Promise<Headers> {
+    const modelId = getBuiltinModels(provider as BuiltinProvider)[0].id;
+    const target = resolveModel({ provider, modelId }, {}, []);
+    if (!target) throw new Error(`unresolved ${provider}/${modelId}`);
+    const agent = createCebianAgent({ model: target, preamble: { systemPrompt: 'base', tools: [] }, thinkingLevel: 'off' });
+    return (await captureRequest(agent, 'hi')).headers;
+  }
+
+  it('OpenRouter 请求不带 pi 的归因头，Cebian 归因原样保留', async () => {
+    const headers = await requestHeaders('openrouter');
+    expect(headers.get('X-OpenRouter-Title')).toBeNull();
+    expect(headers.get('X-OpenRouter-Categories')).toBeNull();
+    expect(headers.get('HTTP-Referer')).toBe('https://cebian.catcat.work');
+    expect(headers.get('X-Title')).toBe('Cebian');
+  });
+
+  it('NVIDIA NIM 请求不带 pi 的计费来源头', async () => {
+    const headers = await requestHeaders('nvidia');
+    expect(headers.get('X-BILLING-INVOKE-ORIGIN')).toBeNull();
   });
 });

@@ -154,9 +154,15 @@ export class MCPClient {
     if (this.connected) return;
     const url = new URL(this.config.transport.url);
     const requestInit = this.buildRequestInit();
+    // SDK 1.32 起 transport 默认只跟随同源重定向，靠 redirect: 'manual' 实现；浏览器对
+    // manual 只返回不透明响应、拿不到跳转目标，结果任何重定向（含 /mcp → /mcp/、http → https）
+    // 都会连接失败。显式 'follow' 保持 1.32 之前的行为：交给 fetch 照常跟随。代价是跨源重定向
+    // 也会跟随，自定义鉴权头（如 X-API-Key）会带到新地址（Fetch 规范只在跨源时丢弃
+    // Authorization）——与 1.32 之前一致，是有意保留，不要改回默认值。
+    const redirectPolicy = 'follow';
     this.transport = this.config.transport.type === 'sse'
-      ? new SSEClientTransport(url, { requestInit })
-      : new StreamableHTTPClientTransport(url, { requestInit });
+      ? new SSEClientTransport(url, { requestInit, redirectPolicy })
+      : new StreamableHTTPClientTransport(url, { requestInit, redirectPolicy });
     // Declare MCP Apps support so servers will attach `_meta.ui.resourceUri`
     // to tools that ship an interactive view.
     const capabilities = {

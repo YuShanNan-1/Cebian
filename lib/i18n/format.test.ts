@@ -10,6 +10,7 @@ const messages: Messages = {
   common_files: { message: 'No files | One file | $1 files' },
   common_named: { message: 'Hi {name}, keep {unknown}' },
   common_code: { message: 'function transform(text, vars) {…}' },
+  common_escaped: { message: 'Use \\{name} for {name}' },
 };
 
 describe('formatMessage', () => {
@@ -69,6 +70,11 @@ describe('formatMessage', () => {
 
   it('不传命名替换时花括号原样保留', () => {
     expect(formatMessage(messages, 'common.code', [])).toBe('function transform(text, vars) {…}');
+  });
+
+  it('命名替换时 \\{ 转义成字面量 {，不当作占位符；不传命名替换时原样保留', () => {
+    expect(formatMessage(messages, 'common.escaped', [{ name: 'Kim' }])).toBe('Use {name} for Kim');
+    expect(formatMessage(messages, 'common.escaped', [])).toBe('Use \\{name} for {name}');
   });
 
   it('null / undefined 参数被忽略', () => {

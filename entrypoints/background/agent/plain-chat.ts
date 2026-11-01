@@ -54,8 +54,8 @@ function isDroppedUser(message: UserMessage): boolean {
  *
  * pi-ai 发送前会丢掉失败 / 中断的 assistant，以及没有正文的 assistant（只有思考或内容为空——
  * 自定义模型不会把思考当正文发）。这里提前丢掉同样的消息，后面才能看出哪些 user 相邻、并把它们
- * 合并。对同一模型产出的历史这与 pi-ai 一致；别的模型留下的纯思考回复 pi-ai 会转成正文发出，
- * 这里也一并丢掉——它本就不是给用户的回答。
+ * 合并。这与 pi-ai 一致：同一模型的历史按上面的规则丢，别的模型留下的思考 pi-ai 1.3 起也直接
+ * 丢掉，于是纯思考回复同样没有正文可发。
  */
 function toPlainMessage(message: Message): Message | undefined {
   switch (message.role) {

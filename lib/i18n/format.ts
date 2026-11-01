@@ -7,7 +7,8 @@
  *    （Chromium `ReplaceStringPlaceholders` / Firefox `localizeMessage` 的语义：去掉首个）；
  * 3. 传了 count 而没传替换数组时，count 本身作为 `$1`；
  * 4. 传了 count 时按 ` | ` 拆复数：2 段 = 1 / 其他，3 段 = 0 / 1 / 其他；
- * 5. 最后应用 `{name}` 命名替换。
+ * 5. 最后应用 `{name}` 命名替换；`\{` 是转义，输出字面量 `{`（`@wxt-dev/i18n` 0.2.8 起的语义，
+ *    同样只在传了命名替换时生效）。
  *
  * 前提：messages.json 不含 `placeholders` 块，文案里的 `$` 只有单个数字的 `$1`–`$9` 与不紧跟
  * 数字的 `$$`（`$x`、`$10`、`$$$` 等两家浏览器语义有分歧或易误读）—— 由 `scripts/lint-i18n.mjs` 锁住。
@@ -21,7 +22,7 @@ type NamedSubstitutions = Record<string, Substitution>;
 type TranslateArg = number | Substitution[] | NamedSubstitutions | null | undefined;
 
 const POSITIONAL_RE = /\$(\$+|[1-9])/g;
-const NAMED_RE = /\{([A-Za-z0-9_]+)\}/g;
+const NAMED_RE = /\\(\{)|\{([A-Za-z0-9_]+)\}/g;
 
 function selectPlural(message: string, count: number): string {
   const forms = message.split(' | ');
@@ -63,9 +64,10 @@ function formatMessage(messages: Messages, key: string, args: TranslateArg[]): s
   if (count != null) message = selectPlural(message, count);
   if (named) {
     const values = named;
-    message = message.replace(NAMED_RE, (match, name: string) =>
-      Object.hasOwn(values, name) ? String(values[name]) : match,
-    );
+    message = message.replace(NAMED_RE, (match, escaped: string | undefined, name: string) => {
+      if (escaped != null) return escaped;
+      return Object.hasOwn(values, name) ? String(values[name]) : match;
+    });
   }
   return message;
 }
